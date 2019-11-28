@@ -1,8 +1,14 @@
 {
   "name": "@remail/components",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "> TODO: description",
-  "keywords": ["react", "email", "react-email", "react email", "email template"],
+  "keywords": [
+    "react",
+    "email",
+    "react-email",
+    "react email",
+    "email template"
+  ],
   "author": "XGHeaven <xgheaven@gmail.com>",
   "homepage": "",
   "license": "ISC",
@@ -20,7 +26,7 @@
     "build": "rimraf ./lib && tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@remail/renderer": "^0.0.0"
+    "@remail/renderer": "^0.0.1"
   },
   "devDependencies": {
     "@types/react": "^16.9.13",

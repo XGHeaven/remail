@@ -1,8 +1,14 @@
 {
   "name": "@remail/template",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "> TODO: description",
-  "keywords": ["react", "email", "react-email", "react email", "email template"],
+  "keywords": [
+    "react",
+    "email",
+    "react-email",
+    "react email",
+    "email template"
+  ],
   "author": "XGHeaven <xgheaven@gmail.com>",
   "homepage": "",
   "license": "ISC",
