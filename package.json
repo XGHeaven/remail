@@ -1,0 +1,28 @@
+{
+  "name": "@remail/packages",
+  "version": "1.0.0",
+  "description": "ReactEmail is a powerful email template renderer based on React",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "build": "lerna run build",
+    "format": "prettier --write \"./packages/**/src/**/*.{ts,tsx}\""
+  },
+  "keywords": ["react", "email", "react-email", "react email", "email template"],
+  "author": "XGHeaven <xgheaven@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^24.0.23",
+    "@types/node": "^12.12.11",
+    "jest": "^24.9.0",
+    "lerna": "^3.19.0",
+    "prettier": "^1.19.1",
+    "rimraf": "^3.0.0",
+    "ts-jest": "^24.1.0",
+    "typescript": "^3.7.2"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node"
+  }
+}

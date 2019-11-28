@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./lib",
+    "paths": {
+      "@remail/*": ["./node_modules/@remail/*/src"]
+    },
+    "preserveSymlinks": true
+  },
+  "exclude": ["*.spec.*", "lib", "*.test.*"],
+  "include": ["./src"]
+}

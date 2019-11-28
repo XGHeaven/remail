@@ -1,0 +1,29 @@
+{
+  "name": "@remail/template",
+  "version": "0.0.0",
+  "description": "> TODO: description",
+  "keywords": ["react", "email", "react-email", "react email", "email template"],
+  "author": "XGHeaven <xgheaven@gmail.com>",
+  "homepage": "",
+  "license": "ISC",
+  "main": "./lib",
+  "directories": {
+    "lib": "lib"
+  },
+  "files": [
+    "lib"
+  ],
+  "publishConfig": {
+    "registry": "http://bnpm.byted.org/"
+  },
+  "scripts": {
+    "build": "rimraf ./lib && tsc -p tsconfig.build.json"
+  },
+  "devDependencies": {
+    "@types/react": "^16.9.13",
+    "react": "^16.12.0"
+  },
+  "peerDependencies": {
+    "react": "16"
+  }
+}
