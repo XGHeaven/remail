@@ -20,7 +20,8 @@
     "lib"
   ],
   "publishConfig": {
-    "registry": "http://bnpm.byted.org/"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "build": "rimraf ./lib && tsc -p tsconfig.build.json"
