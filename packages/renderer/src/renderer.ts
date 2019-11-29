@@ -31,9 +31,11 @@ import {
 } from './react-server-render/dom-property'
 import { RendererContext } from './context'
 
+export type NonUndefined<T> = T extends undefined ? never : T
+
 const { ReactCurrentDispatcher } = ReactSharedInternals
 
-function stringifyPropsToMap(props: Record<string, any>): Record<string, string | true> {
+function normalizeProps(props: OriginalProps): NormalizedProps {
   return Object.keys(props).reduce((newProps, name) => {
     const info = getPropertyInfo(name)
 
@@ -71,14 +73,16 @@ function stringifyPropsToMap(props: Record<string, any>): Record<string, string 
   }, {} as any)
 }
 
-function stringifyPropsMap(map: Record<string, string | true>) {
+function stringifyProps(map: Record<string, string | true>) {
   return Object.entries(map)
     .map(([name, value]) => {
       if (typeof value === 'boolean') {
         return name
       }
+      if (!value) { return '' }
       return `${name}="${value}"`
     })
+    .filter(v => !!v)
     .join(' ')
 }
 
@@ -120,30 +124,36 @@ export interface RendererPlugin {
   /**
    * 在 props 对象进行处理之前执行。传入的参数为最原始的 props 对象。
    * 建议在修改前先 clone 一份，并返回 clone 之后的对象
-   *
-   * FIXME: 命名有些丑，下面的几个也是
    */
-  beforeStringifyProps?: RendererBeforeStringifyProps
+  normalizeProps?: RendererNormalizePropsHook
   /**
-   * 在 props 对象序列化之后执行，其中 value 为字符串或者 true。
+   * 在 props 对象标准化之后执行，其中 value 为字符串或者 true。
    * 会自动剔除空值的 props，以及对 style 等元素进行序列化。
    * 当元素的值为字符串的时候，表示 `key="value"`。如果为 true，则表示 `key`
    */
-  afterStringifyProps?: RendererAfterStringifyProps
+  stringifyProps?: RendererStringifyPropsHook
   /**
    * 提供对 Element 遍历的能力，如果要进行修改，可以直接调用 React.cloneElement
    */
-  walkElement?: RendererWalkElement
+  visit?: RendererVisitHook
   /**
-   * 提供直接修改根组件的能力
+   * 开始的钩子，提供直接修改根组件的能力
    */
-  rootElement?: RendererWalkElement
+  begin?: RendererBeginHook
+  /**
+   * 结束的钩子
+   */
+  end?: RendererEndHook
 }
 
-export type StringifyPropsMap = Record<string, string | true>
-export type RendererBeforeStringifyProps = (props: Record<string, any>) => Record<string, any>
-export type RendererAfterStringifyProps = (props: StringifyPropsMap) => StringifyPropsMap
-export type RendererWalkElement = (element: ReactElement<any>) => ReactElement<any> | null
+export type OriginalProps = Readonly<Record<string, any>>
+export type NormalizedProps = Record<string, string | true>
+export type RendererNormalizePropsHook = (props: OriginalProps, element: ReactElement<any>) => OriginalProps | undefined
+export type RendererStringifyPropsHook = (props: NormalizedProps, element: ReactElement<any>) => NormalizedProps | undefined
+export type RendererWalkElementHook = (element: ReactElement<any>) => ReactElement<any> | null | undefined
+export type RendererVisitHook = (element: ReactElement) => ReactElement | null | undefined
+export type RendererBeginHook = (element: ReactElement) => ReactElement | undefined
+export type RendererEndHook = () => void
 
 export interface RemailRendererOptions {
   /**
@@ -165,39 +175,34 @@ export class RemailRenderer {
   it: Iterator<string, void, void> | null = null
   finished = false
 
-  private beforeStringifyProps: RendererBeforeStringifyProps
-  private afterStringifyProps: RendererAfterStringifyProps
-  private walkElement: RendererWalkElement
-
   constructor(private rootElement: ReactElement, options: Partial<RemailRendererOptions> = {}) {
     this.options = Object.assign({}, defaultOptions, options)
-    this.beforeStringifyProps = this.componseFunction('beforeStringifyProps')
-    this.afterStringifyProps = this.componseFunction('afterStringifyProps')
-    this.walkElement = this.componseFunction('walkElement')
     // wrap element with RendererContext
     this.rootElement = createElement(
       RendererContext.Provider,
       { value: { isServer: true } },
-      this.componseFunction('rootElement')(rootElement),
+      this.hook('begin', rootElement),
     )
   }
 
-  private componseFunction(name: string) {
-    const funcs = this.options.plugins
-      .map((plugin: any) => {
-        if (plugin[name]) {
-          return (v: any) => plugin[name](v)
+  private hook<N extends keyof RendererPlugin>(name: N, ...args: Parameters<NonNullable<RendererPlugin[N]>>): NonUndefined<ReturnType<NonNullable<RendererPlugin[N]>>> {
+    const [,...rest] = args
+    let ret = args[0]
+    for (const plugin of this.options.plugins) {
+      const hook = plugin[name]
+      if (hook) {
+        const newRet = (hook as any).apply(plugin, [ret, ...rest])
+        if (newRet !== undefined) {
+          ret = newRet
         }
-        return null
-      })
-      .filter<(v: any) => any>((v): v is any => !!v)
-
-    return (input: any) => {
-      for (const func of funcs) {
-        input = func(input)
       }
-      return input
+
+      if (ret === null) {
+        return ret
+      }
     }
+
+    return ret as any
   }
 
   pushProvider(context: Context<any>, value: any) {
@@ -226,6 +231,7 @@ export class RemailRenderer {
     const { value, done } = this.it.next()
     if (done) {
       this.finished = true
+      this.hook('end')
     }
     return value || ''
   }
@@ -244,7 +250,7 @@ export class RemailRenderer {
       }
       yield ''
     } else if (isValidElement(node)) {
-      const newNode = this.walkElement(node)
+      const newNode = this.hook('visit', node)
       if (newNode === null) {
         return yield ''
       }
@@ -258,8 +264,8 @@ export class RemailRenderer {
         const tag = type.toLowerCase()
         let html = `<${tag}`
         const dangerHtml = props.dangerouslySetInnerHTML
-        const propsString = stringifyPropsMap(
-          this.afterStringifyProps(stringifyPropsToMap(this.beforeStringifyProps(props))),
+        const propsString = stringifyProps(
+          this.hook('stringifyProps', normalizeProps(this.hook('normalizeProps', props, node)), node),
         )
         if (propsString) {
           html += ' ' + propsString

@@ -11,7 +11,7 @@ function run(element: ReactElement<any>, options: Partial<RemailRendererOptions>
 }
 
 describe('renderer/RemailRenderer', () => {
-  describe('render', () => {
+  describe('#render', () => {
     it('should works for host component', () => {
       expect(run(<div>host</div>)).toBe('<div>host</div>')
     })
@@ -192,12 +192,42 @@ describe('renderer/RemailRenderer', () => {
     })
   })
 
+  describe('#hook', () => {
+    function call<T extends (v: V, ...args: any[]) => V | null | undefined, V = any>(funcs: T[], ...args: [V, ...any[]]): any {
+      return (new RemailRenderer(<div>1</div>, {
+        plugins: funcs.map(func => ({visit: func as any}))
+      }) as any).hook('visit', ...args)
+    }
+
+    it('should return original argument when no funcs', () => {
+      expect(call([], 1)).toBe(1)
+    })
+
+    it('should ignore undefined return value', () => {
+      expect(call([v => undefined], 1)).toBe(1)
+    })
+
+    it('should continue to call when return undefined', () => {
+      expect(call([v => v + 1, v => undefined, v => v + 1], 0)).toBe(2)
+    })
+
+    it('should returns null when one of func returns null', () => {
+      expect(call([v => v, v => null], 1)).toBeNull()
+    })
+
+    it('should break call chain when one of func returns null', () => {
+      const fn = jest.fn((v: number) => v + 1)
+      expect(call([fn, v => null, fn], 0)).toBe(null)
+      expect(fn).toBeCalledTimes(1)
+    })
+  })
+
   describe('options.plugin', () => {
     function runPlugin(element: ReactElement, plugin: RendererPlugin) {
       return run(element, { plugins: [plugin] })
     }
 
-    it('.beforeStringifyProps should run before stringify props', () => {
+    it('.normalizeProps should run before stringify props', () => {
       const element = (
         <div className="first one">
           <div className="second one" style={{ color: 'red' }}>
@@ -210,12 +240,12 @@ describe('renderer/RemailRenderer', () => {
 
       const { children, ...expected } = element.props
 
-      runPlugin(element, { beforeStringifyProps: fn })
+      runPlugin(element, { normalizeProps: fn })
       expect(fn).toBeCalledTimes(2)
-      expect(fn.mock.calls[0]).toEqual([expected])
+      expect(fn.mock.calls[0][0]).toEqual(expected)
     })
 
-    it('.beforeStringifyProps should change props by return a new one', () => {
+    it('.normalizeProps should change props by return a new one', () => {
       const fn = jest.fn(v => ({
         ...v,
         className: 'ohhhh',
@@ -225,12 +255,12 @@ describe('renderer/RemailRenderer', () => {
         },
       }))
 
-      expect(runPlugin(<div style={{ color: 'red' }}>Child</div>, { beforeStringifyProps: fn })).toBe(
+      expect(runPlugin(<div style={{ color: 'red' }}>Child</div>, { normalizeProps: fn })).toBe(
         `<div style="color:red;background:green" class="ohhhh">Child</div>`,
       )
     })
 
-    it('.afterStringifyProps should change result by return a new one', () => {
+    it('.stringifyProps should change result by return a new one', () => {
       const fn = jest.fn(v => ({
         ...v,
         class: 'yeah',
@@ -238,12 +268,12 @@ describe('renderer/RemailRenderer', () => {
         checked: true,
       }))
 
-      expect(runPlugin(<div>Child</div>, { afterStringifyProps: fn })).toBe(
+      expect(runPlugin(<div>Child</div>, { stringifyProps: fn })).toBe(
         `<div class="yeah" style="xxx" checked>Child</div>`,
       )
     })
 
-    it('.walkElement should change element by return a new or clone element', () => {
+    it('.visit should change element by return a new or clone element', () => {
       const Placeholder = () => null
       const fn = jest.fn(node => {
         if (node.type === Placeholder) {
@@ -258,7 +288,7 @@ describe('renderer/RemailRenderer', () => {
             1
             <Placeholder />2
           </div>,
-          { walkElement: fn },
+          { visit: fn },
         ),
       ).toBe(`<div>1<i>I</i>2</div>`)
     })

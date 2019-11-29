@@ -9,6 +9,22 @@ export function GlobalStyleInjectPlaceholder(props: any) {
 
 export const GlobalStyleInjectString = '-=-=-=-THIS_IS_A_PLACEHOLDER_FOR_EMOTION_GLOBAL_STYLE-=-=-=-'
 
+export interface EmotionRendererPluginOptions {
+  cache?: EmotionCache
+  emitGlobalStyle?: boolean
+  /**
+   * 去除 className 中和 emotion 相关的 className
+   * @default false
+   */
+  emitClassProp?: boolean
+  /**
+   * 开启流模式的情况下，会将当前已有获取到的 global style 属性注入到 placeholer 中
+   * 不开始流模式的情况下，会以一个占位符代替，等渲染完成之后再通过 injectGlobalStyle 插入 style
+   * @default false
+   */
+  streamMode?: boolean
+}
+
 export class EmotionRendererPlugin implements RendererPlugin {
   cache: EmotionCache
   classMap = new Map<string, string>()
@@ -17,20 +33,7 @@ export class EmotionRendererPlugin implements RendererPlugin {
   emitClassProp = false
   streamMode = false
 
-  constructor(
-    options: {
-      cache?: EmotionCache
-      emitGlobalStyle?: boolean
-      // TODO
-      emitClassProp?: boolean
-      /**
-       * 开启流模式的情况下，会将当前已有获取到的 global style 属性注入到 placeholer 中
-       * 不开始流模式的情况下，会以一个占位符代替，然后再 replace
-       * @default false
-       */
-      streamMode?: boolean
-    } = {},
-  ) {
+  constructor(options: EmotionRendererPluginOptions = {}) {
     this.emitGlobalStyle = !!options.emitGlobalStyle
     this.emitClassProp = !!options.emitClassProp
     this.streamMode = !!options.streamMode
@@ -56,16 +59,28 @@ export class EmotionRendererPlugin implements RendererPlugin {
     return html.replace(GlobalStyleInjectString, this.globalStyle)
   }
 
-  afterStringifyProps(props: any) {
-    const classNames: string[] = (props.class || '').split(' ')
-    const style = classNames
-      .map(name => this.classMap.get(`.${name}`))
-      .filter(v => !!v)
-      .join(';')
+  stringifyProps(props: any) {
+    const { class: className, ...otherProps } = props
+    const classNames: string[] = (className || '').split(' ')
+    const unfound: string[] = []
+    const styles: string[] = []
+
+    for (const name of classNames) {
+      const style = this.classMap.get(`.${name}`)
+      if (style) {
+        styles.push(style)
+      } else {
+        unfound.push(name)
+      }
+    }
+
+    const style = styles.join(';')
+    const name = unfound.join(' ')
 
     if (style) {
       return {
-        ...props,
+        ...otherProps,
+        ...(this.emitClassProp ? { class: name } : { class: className }),
         style: `${props.style ? props.style + ';' : ''}${style}`,
       }
     }
@@ -73,14 +88,14 @@ export class EmotionRendererPlugin implements RendererPlugin {
     return props
   }
 
-  rootElement(root: any) {
+  begin(root: any) {
     return createElement(CacheProvider, { value: this.cache }, root)
   }
 
-  walkElement(node: any) {
+  visit(node: any) {
     if (node.type === 'style') {
       // ignore all style tag except placeholder
-      // 不太清楚 inserted 代表的含义是什么？
+      // 不太清楚 inserted 代表的含义是什么？暂且就用来判断是否是全局样式
       const inserted = this.cache.inserted[node.props['data-emotion-css']]
       if (!inserted) {
         // 说明这个是通过 Global 组件注入的，所以直接将内容添加到 globalStyle 中就好了
