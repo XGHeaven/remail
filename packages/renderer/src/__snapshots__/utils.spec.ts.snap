@@ -1,0 +1,66 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`permutation should works 1`] = `
+Array [
+  Object {
+    "a": 1,
+    "b": "A",
+    "c": "a",
+  },
+  Object {
+    "a": 2,
+    "b": "A",
+    "c": "a",
+  },
+  Object {
+    "a": 3,
+    "b": "A",
+    "c": "a",
+  },
+  Object {
+    "a": 1,
+    "b": "B",
+    "c": "a",
+  },
+  Object {
+    "a": 2,
+    "b": "B",
+    "c": "a",
+  },
+  Object {
+    "a": 3,
+    "b": "B",
+    "c": "a",
+  },
+  Object {
+    "a": 1,
+    "b": "A",
+    "c": "b",
+  },
+  Object {
+    "a": 2,
+    "b": "A",
+    "c": "b",
+  },
+  Object {
+    "a": 3,
+    "b": "A",
+    "c": "b",
+  },
+  Object {
+    "a": 1,
+    "b": "B",
+    "c": "b",
+  },
+  Object {
+    "a": 2,
+    "b": "B",
+    "c": "b",
+  },
+  Object {
+    "a": 3,
+    "b": "B",
+    "c": "b",
+  },
+]
+`;

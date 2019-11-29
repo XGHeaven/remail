@@ -1,4 +1,4 @@
-import { ReactNode, ReactElement, isValidElement, Context, ClassicComponentClass, FC } from 'react'
+import { ReactNode, ReactElement, isValidElement, Context, ClassicComponentClass, FC, createElement } from 'react'
 import { escapeTextForBrowser } from './react-server-render/escapeTextForBrowser'
 import {
   REACT_PROVIDER_TYPE,
@@ -29,6 +29,7 @@ import {
   OVERLOADED_BOOLEAN,
   isAttributeNameSafe,
 } from './react-server-render/dom-property'
+import { RendererContext } from './context'
 
 const { ReactCurrentDispatcher } = ReactSharedInternals
 
@@ -81,48 +82,6 @@ function stringifyPropsMap(map: Record<string, string | true>) {
     .join(' ')
 }
 
-export function renderProps(props: any) {
-  return Object.keys(props)
-    .map(name => {
-      const info = getPropertyInfo(name)
-
-      const value = props[name]
-
-      if (shouldRemoveAttribute(name, value, info, false)) {
-        // 检查 value 空值等问题
-        return null
-      }
-
-      if (name === 'style') {
-        const styles = createMarkupForStyles(value)
-        if (!styles) {
-          return null
-        }
-
-        return `${name}="${styles}"`
-      }
-
-      if (shouldIgnoreAttribute(name, info, false)) {
-        return null
-      }
-
-      if (info !== null) {
-        const { attributeName, type } = info
-        if (type === BOOLEAN || (type === OVERLOADED_BOOLEAN && value === true)) {
-          return attributeName
-        } else {
-          return `${attributeName}="${escapeTextForBrowser(value)}"`
-        }
-      } else if (isAttributeNameSafe(name)) {
-        return `${name.toLowerCase()}="${escapeTextForBrowser(value)}"`
-      }
-
-      return null
-    })
-    .filter(str => str !== null)
-    .join(' ')
-}
-
 function readContext(ctx: Context<any>): any {
   return (ctx as any)._currentValue
 }
@@ -135,7 +94,9 @@ function isFunctionComponent(fn: any): fn is FC {
   return !isClassComponent(fn)
 }
 
-const selfCloseTags = ['input', 'hr']
+const selfCloseTags = [
+  'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'keygen', 'link', 'meta', 'param', 'source', 'track', 'wbr'
+]
 
 function isSelfCloseTag(tag: string) {
   return selfCloseTags.includes(tag)
@@ -171,20 +132,23 @@ export type RendererAfterStringifyProps = (props: StringifyPropsMap) => Stringif
 export type RendererWalkElement = (element: ReactElement<any>) => ReactElement<any> | null
 
 export interface RemailRendererOptions {
+  /**
+   * You can use builtin HTMLDocType enum. Such as HTMLDocType.HTML5.
+   * @default ''
+   */
   doctype: string
   plugins: RendererPlugin[]
 }
 
 const defaultOptions: RemailRendererOptions = {
-  doctype:
-    '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">',
+  doctype: '',
   plugins: [],
 }
 
 export class RemailRenderer {
   private contextStack: any[] = []
   options: RemailRendererOptions
-  it: Iterator<string, void, void>
+  it: Iterator<string, void, void> | null = null
   finished = false
 
   private beforeStringifyProps: RendererBeforeStringifyProps
@@ -196,8 +160,8 @@ export class RemailRenderer {
     this.beforeStringifyProps = this.componseFunction('beforeStringifyProps')
     this.afterStringifyProps = this.componseFunction('afterStringifyProps')
     this.walkElement = this.componseFunction('walkElement')
-    this.rootElement = this.componseFunction('rootElement')(rootElement)
-    this.it = this.generateNextNode(this.rootElement)
+    // wrap element with RendererContext
+    this.rootElement = createElement(RendererContext.Provider, {value: {isServer: true}}, this.componseFunction('rootElement')(rootElement))
   }
 
   private componseFunction(name: string) {
@@ -219,10 +183,10 @@ export class RemailRenderer {
   }
 
   pushProvider(context: Context<any>, value: any) {
-    const internalContact: any = (context as any)._context
-    const preValue = internalContact._currentValue
+    const internalContext: any = (context as any)._context
+    const preValue = internalContext._currentValue
     this.contextStack.push(preValue)
-    internalContact._currentValue = value
+    internalContext._currentValue = value
   }
 
   popProvider(context: Context<any>) {
@@ -232,6 +196,15 @@ export class RemailRenderer {
   }
 
   next(): string {
+    if (this.finished) {
+      return ''
+    }
+
+    if (!this.it) {
+      this.it = this.generateNextNode(this.rootElement)
+      return this.options.doctype || ''
+    }
+
     const { value, done } = this.it.next()
     if (done) {
       this.finished = true
