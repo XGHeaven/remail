@@ -2,41 +2,58 @@ import React, { ReactNode } from 'react'
 import { HTML, Head, Body } from './html'
 import { renderToString, RendererContext } from '@remail/renderer'
 
-function render(node: ReactNode) {
-  return renderToString(<RendererContext.Provider value={{ isServer: true }}>{node}</RendererContext.Provider>)
+function render(node: ReactNode, isServer = true) {
+  return renderToString(<RendererContext.Provider value={{ isServer }}>{node}</RendererContext.Provider>)
 }
 
 describe('components/html', () => {
-  it('should render nothing when no Head or Body', () => {
-    function testEmpty(node: any) {
-      expect(render(node)).toBe('<html></html>')
-    }
-
-    testEmpty(<HTML></HTML>)
-    testEmpty(<HTML>123</HTML>)
-    testEmpty(
-      <HTML>
-        <div>22</div>
-      </HTML>,
-    )
-    testEmpty(
-      <HTML>
-        <head></head>
-        <body></body>
-      </HTML>,
-    )
-  })
-
-  it('should only render first Head or Body', () => {
-    expect(
-      render(
+  describe('HTML', () => {
+    it('should render children when in browser', () => {
+      expect(render(
         <HTML>
-          <Head className="first-one"></Head>
-          <Head className="second-one"></Head>
-          <Body className="first-one">body1</Body>
-          <Body className="second-one">body2</Body>
+          children
         </HTML>,
-      ),
-    ).toBe('<html><head class="first-one"></head><body class="first-one"></body></html>')
-  })
+        false
+      )).toBe(`children`)
+    })
+
+    it('should render html when in server', () => {
+      expect(render(
+        <HTML>
+          children
+        </HTML>
+      )).toBe(`<html>children</html>`)
+    })
+  });
+
+  describe('Head', () => {
+    it('should render head in server', () => {
+      expect(render(
+        <Head>
+          <meta name="xxx"/>
+        </Head>
+      )).toBe(`<head><meta name="xxx" /></head>`)
+    })
+
+    it('should render nothing in browser', () => {
+      expect(render(
+        <Head>
+          <meta name="xxx"/>
+        </Head>,
+        false
+      )).toBe(``)
+    })
+  });
+
+  describe('Body', () => {
+    it('should only render children in browser', () => {
+      expect(render(
+        <Body>children</Body>, false
+      )).toBe(`children`)
+    });
+
+    it('should render body tag in server', () => {
+      expect(render(<Body>children</Body>)).toBe(`<body>children</body>`)
+    });
+  });
 })

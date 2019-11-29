@@ -1,7 +1,7 @@
 /**
  * 因为对于邮件模板来说，需要接管的东西很多，所以请使用以下组件接管
  */
-import React, { HTMLAttributes, ReactElement, Children, isValidElement, useContext, useEffect } from 'react'
+import React, { HTMLAttributes, ReactElement, useContext } from 'react'
 import { RendererContext } from '@remail/renderer'
 
 export interface HTMLProps extends HTMLAttributes<HTMLHtmlElement> {}
@@ -9,33 +9,23 @@ export interface HTMLProps extends HTMLAttributes<HTMLHtmlElement> {}
 export function HTML(props: HTMLProps) {
   const { children, ...otherProps } = props
   const { isServer } = useContext(RendererContext)
-  let head: ReactElement | null = null
-  let body: ReactElement | null = null
-
-  Children.forEach(children, child => {
-    if (isValidElement(child)) {
-      if (child.type === Body && !body) {
-        body = child
-      } else if (child.type === Head && !head) {
-        head = child
-      }
-    }
-  })
 
   if (isServer) {
     return (
       <html {...otherProps}>
-        {head}
-        {body}
+        {children}
       </html>
     )
   } else {
-    return body
+    return children as ReactElement
   }
 }
 
 export interface HeadProps extends HTMLAttributes<HTMLHeadElement> {}
 
+/**
+ * IMPREOVE: support render head children in browser
+ */
 export function Head(props: HeadProps) {
   const { children, ...otherProps } = props
   const { isServer } = useContext(RendererContext)
@@ -44,7 +34,7 @@ export function Head(props: HeadProps) {
     return <head {...otherProps}>{children}</head>
   }
 
-  console.log('All children in Head would be ignore')
+  console.warn('All children in Head component would be ignore in browser')
 
   return null
 }
@@ -60,8 +50,12 @@ export function Body(props: BodyProps) {
   }
 
   console.warn(
-    'Body would directly render element to document.body. You will receive react-dom warning about this, Please ignore it',
+    'Body tag do not rendered. Only some special props would be sync to document.body',
   )
+
+  if (typeof props.className === 'string') {
+    document.body.className = props.className
+  }
 
   return children as ReactElement
 }
