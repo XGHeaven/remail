@@ -9,7 +9,14 @@
     "react email",
     "email template"
   ],
-  "author": "XGHeaven <xgheaven@gmail.com>",
+  "author": {
+    "name": "xgheaven",
+    "email": "xgheaven@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/XGHeaven/remail/tree/master/packages/template"
+  },
   "homepage": "",
   "license": "MIT",
   "main": "./lib",
