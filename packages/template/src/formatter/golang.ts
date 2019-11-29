@@ -1,10 +1,5 @@
 import { TemplateFormatter } from '../interface'
-import {
-  ExpressionRecord,
-  ExprKitAction,
-  ExpressionKit,
-  createKit,
-} from '../expression'
+import { ExpressionRecord, ExprKitAction, ExpressionKit, createKit } from '../expression'
 import { ReactNode } from 'react'
 
 export class GolangTemplateFormatter implements TemplateFormatter {

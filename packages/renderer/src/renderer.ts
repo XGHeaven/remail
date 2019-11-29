@@ -95,7 +95,21 @@ function isFunctionComponent(fn: any): fn is FC {
 }
 
 const selfCloseTags = [
-  'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'keygen', 'link', 'meta', 'param', 'source', 'track', 'wbr'
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'keygen',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr',
 ]
 
 function isSelfCloseTag(tag: string) {
@@ -161,7 +175,11 @@ export class RemailRenderer {
     this.afterStringifyProps = this.componseFunction('afterStringifyProps')
     this.walkElement = this.componseFunction('walkElement')
     // wrap element with RendererContext
-    this.rootElement = createElement(RendererContext.Provider, {value: {isServer: true}}, this.componseFunction('rootElement')(rootElement))
+    this.rootElement = createElement(
+      RendererContext.Provider,
+      { value: { isServer: true } },
+      this.componseFunction('rootElement')(rootElement),
+    )
   }
 
   private componseFunction(name: string) {

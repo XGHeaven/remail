@@ -11,11 +11,7 @@ export function HTML(props: HTMLProps) {
   const { isServer } = useContext(RendererContext)
 
   if (isServer) {
-    return (
-      <html {...otherProps}>
-        {children}
-      </html>
-    )
+    return <html {...otherProps}>{children}</html>
   } else {
     return children as ReactElement
   }
@@ -49,9 +45,7 @@ export function Body(props: BodyProps) {
     return <body {...otherProps}>{children}</body>
   }
 
-  console.warn(
-    'Body tag do not rendered. Only some special props would be sync to document.body',
-  )
+  console.warn('Body tag do not rendered. Only some special props would be sync to document.body')
 
   if (typeof props.className === 'string') {
     document.body.className = props.className
