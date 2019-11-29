@@ -15,6 +15,9 @@
 
 ### Write a Email template component
 
+> `List` and `Row` is a wrapper for table layout. You can use `table/tr/td` to replace them.
+> `HTML/Head/Body` is designed to running in brwoser/node environment and let it easy to use.
+
 ```js
 // App.tsx
 import { HTML, Head, Body, List, Row } from '@remail/components'
@@ -66,7 +69,7 @@ for (const perm of permutation({
   lang: ['zh-CN', 'en-US', 'ja-JP'],
   country: ['China', 'America', 'Japan']
 })) {
-  const html = renderToString(<App/>, {
+  const html = renderToString(<App {...perm}/>, {
     plugins: [
       // please renew plugin for each render
       // because most of plugins has side effect
@@ -78,10 +81,37 @@ for (const perm of permutation({
 
 ### Setup development environment
 
+You can use web development stack to develop email template. Such as webpack/parcel/rollup.
+
+Here use `parcel` as a example.
+
+First, write a html template and a entrypoint file.
+
 ```js
-// develop.tsx for development in browser
-import { createServer, createMiddleware } from '@remail/server'
+// dev.tsx - entrypoint
+import { render } from 'react-dom'
 import { App } from './App'
 
 render(<App/>, document.getElementById('app')!)
 ```
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Template</title>
+</head>
+<body>
+  <div id="app"></div>
+  <script src="./dev.tsx"></script>
+</body>
+</html>
+```
+
+It's done. Just run `parcel serve dev.browser.ts` and open `localhost:1234` to start happy coding.
+
+## Thanks
+
+If you have any questions, please submit an issue.
