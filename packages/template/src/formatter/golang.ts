@@ -2,8 +2,6 @@ import { TemplateFormatter } from '../interface'
 import {
   ExpressionRecord,
   ExprKitAction,
-  ExpressionRecordGetAction,
-  ExpressionRecordSymbol,
   ExpressionKit,
   createKit,
 } from '../expression'

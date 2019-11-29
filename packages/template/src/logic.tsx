@@ -23,7 +23,7 @@ export const TemplateContext = createContext<{
   // forEachFormat: createNoop('forEachFormat')
 })
 
-export const TemplateConfig = TemplateContext.Provider
+export const TemplateProvider = TemplateContext.Provider
 
 export interface InterpolateProps<V> {
   expr?: Expression<V>
@@ -75,7 +75,7 @@ export interface ForEachProps<V, R> {
 }
 
 export function ForEach<V = any, R = any>(props: ForEachProps<V, R>) {
-  const { value, formatter } = useContext(TemplateContext)
+  const { value } = useContext(TemplateContext)
 
   const { source, render } = props
 

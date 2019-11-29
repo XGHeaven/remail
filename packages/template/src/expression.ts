@@ -113,11 +113,17 @@ export function isExpressionRecord(record: any): record is ExpressionRecord {
   return !!(record.type && record.names)
 }
 
+/**
+ * Record expression to a record. You can use this record to replay or format it to template syntax
+ */
 export function recordExpr<T = any>(expr: Expression<T>): ExpressionRecord | null {
   const finalKit = expr((createKit() as unknown) as T)
   return getExprRecordFromKit(finalKit)
 }
 
+/**
+ * Replay a expression to get value with the record.
+ */
 export function replayExpr(record: ExpressionRecord, value: any): any {
   if (!isExpressionRecord(record)) {
     // 比如直接返回了数字或者字符串之类的
