@@ -7,6 +7,6 @@
     },
     "preserveSymlinks": true
   },
-  "exclude": ["*.spec.*", "lib", "*.test.*"],
+  "exclude": ["**/*.spec.*", "**/*.test.*"],
   "include": ["./src"]
 }
