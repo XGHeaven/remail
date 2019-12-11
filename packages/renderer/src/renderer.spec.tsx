@@ -193,9 +193,12 @@ describe('renderer/RemailRenderer', () => {
   })
 
   describe('#hook', () => {
-    function call<T extends (v: V, ...args: any[]) => V | null | undefined, V = any>(funcs: T[], ...args: [V, ...any[]]): any {
-      return (new RemailRenderer(<div>1</div>, {
-        plugins: funcs.map(func => ({visit: func as any}))
+    function call<T extends (v: V, ...args: any[]) => V | null | undefined, V = any>(
+      funcs: T[],
+      ...args: [V, ...any[]]
+    ): any {
+      return (new RemailRenderer((<div>1</div>), {
+        plugins: funcs.map(func => ({ visit: func as any })),
       }) as any).hook('visit', ...args)
     }
 

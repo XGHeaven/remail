@@ -79,7 +79,9 @@ function stringifyProps(map: Record<string, string | true>) {
       if (typeof value === 'boolean') {
         return name
       }
-      if (!value) { return '' }
+      if (!value) {
+        return ''
+      }
       return `${name}="${value}"`
     })
     .filter(v => !!v)
@@ -149,7 +151,10 @@ export interface RendererPlugin {
 export type OriginalProps = Readonly<Record<string, any>>
 export type NormalizedProps = Record<string, string | true>
 export type RendererNormalizePropsHook = (props: OriginalProps, element: ReactElement<any>) => OriginalProps | undefined
-export type RendererStringifyPropsHook = (props: NormalizedProps, element: ReactElement<any>) => NormalizedProps | undefined
+export type RendererStringifyPropsHook = (
+  props: NormalizedProps,
+  element: ReactElement<any>,
+) => NormalizedProps | undefined
 export type RendererWalkElementHook = (element: ReactElement<any>) => ReactElement<any> | null | undefined
 export type RendererVisitHook = (element: ReactElement) => ReactElement | null | undefined
 export type RendererBeginHook = (element: ReactElement) => ReactElement | undefined
@@ -185,8 +190,11 @@ export class RemailRenderer {
     )
   }
 
-  private hook<N extends keyof RendererPlugin>(name: N, ...args: Parameters<NonNullable<RendererPlugin[N]>>): NonUndefined<ReturnType<NonNullable<RendererPlugin[N]>>> {
-    const [,...rest] = args
+  private hook<N extends keyof RendererPlugin>(
+    name: N,
+    ...args: Parameters<NonNullable<RendererPlugin[N]>>
+  ): NonUndefined<ReturnType<NonNullable<RendererPlugin[N]>>> {
+    const [, ...rest] = args
     let ret = args[0]
     for (const plugin of this.options.plugins) {
       const hook = plugin[name]

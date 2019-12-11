@@ -1,13 +1,13 @@
 import { TemplateFormatter } from '../interface'
-import { ExpressionRecord, ExprKitAction, isExpressionRecord } from '../expression'
+import { ExpressionRecord, ExpAction, isExpressionRecord } from '../expression'
 import { ReactNode } from 'react'
 
 // TODO
 export class EjsTemplateFormatter implements TemplateFormatter {
   private expr(record: ExpressionRecord): string {
-    if (record.type === ExprKitAction.Get) {
+    if (record.type === ExpAction.Get) {
       return record.names.join('.')
-    } else {
+    } else if (record.type === ExpAction.Call) {
       return `${record.names.join('.')}(${record.args
         .map(rec => {
           if (isExpressionRecord(rec)) {
@@ -16,6 +16,9 @@ export class EjsTemplateFormatter implements TemplateFormatter {
           return rec
         })
         .join(', ')})`
+    } else {
+      // TODO
+      return ''
     }
   }
 

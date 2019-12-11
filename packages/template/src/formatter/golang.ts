@@ -1,17 +1,17 @@
 import { TemplateFormatter } from '../interface'
-import { ExpressionRecord, ExprKitAction, ExpressionKit, createKit } from '../expression'
+import { ExpressionRecord, ExpAction, ExpressionKit, createKit } from '../expression'
 import { ReactNode } from 'react'
 
 export class GolangTemplateFormatter implements TemplateFormatter {
   private expr(record: ExpressionRecord, isParentCall: boolean = false): string {
-    if (record.type === ExprKitAction.Get) {
+    if (record.type === ExpAction.Get) {
       return record.names.map(name => `.${name}`).join('')
-    } else {
+    } else if (record.type === ExpAction.Call) {
       const funcName = record.names.map(name => '.' + String(name)).join('')
       const restArgs = record.args.slice()
       const lastArgs = restArgs.pop()
-      const isRestAllGet = restArgs.every(rec => rec.type === ExprKitAction.Get)
-      const isLastCall = lastArgs.type === ExprKitAction.Call
+      const isRestAllGet = restArgs.every(rec => rec.type === ExpAction.Get)
+      const isLastCall = lastArgs.type === ExpAction.Call
 
       if (!isRestAllGet) {
         // 当除了最后一个参数外有其他的函数调用，那么在 golang 中是无法表示的，所以直接报错。
@@ -26,6 +26,9 @@ export class GolangTemplateFormatter implements TemplateFormatter {
       } else {
         return `${funcName} ${restArgsStr}`.trim() + ` ${lastStr}`
       }
+    } else {
+      // TODO
+      return ''
     }
   }
 
