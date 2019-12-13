@@ -1,6 +1,7 @@
-import { createContext, useContext, ReactNode } from 'react'
-import { Expression, recordExpr, replayExpr } from './expression'
+import React, { createContext, useContext, ReactNode, useMemo } from 'react'
+import { Expression, recordExpr, replayExpr, recordExprAndKit, createKit } from './expression'
 import { TemplateFormatter } from './interface'
+import { Fragment } from 'react'
 
 const createNoop = (key: string) => {
   return (() => {
@@ -25,6 +26,12 @@ export const TemplateContext = createContext<{
 
 export const TemplateProvider = TemplateContext.Provider
 
+export const TemplateExpressionContext = createContext<{
+  valueMap: ReadonlyMap<any, any>
+}>({
+  valueMap: new Map(),
+})
+
 export interface InterpolateProps<V> {
   expr?: Expression<V>
   children?: Expression<V>
@@ -32,15 +39,28 @@ export interface InterpolateProps<V> {
 
 export function Interpolate<V = any>(props: InterpolateProps<V>) {
   const { formatter, value } = useContext(TemplateContext)
+  const { valueMap } = useContext(TemplateExpressionContext)
   const expr = props.expr || props.children
+  const [record, kit] = useMemo(() => {
+    if (!expr) {
+      console.error('You must be provide expr props or children for Interpolate')
+      return [null, null]
+    }
 
-  if (!expr) {
+    return recordExprAndKit(expr)
+  }, [expr])
+
+  if (!record) {
+    // TODO: show warning
     return null
   }
 
-  const record = recordExpr(expr)
-
-  return record ? (value ? replayExpr(record, value) : formatter.interpolate(record)) : null
+  if (value) {
+    const newValueMap = new Map([...valueMap.entries(), [kit, value]])
+    return replayExpr(record, newValueMap)
+  } else {
+    return formatter.interpolate(record)
+  }
 }
 
 export interface IfProps<V = any> {
@@ -52,10 +72,11 @@ export interface IfProps<V = any> {
 export function If<V>(props: IfProps<V>) {
   const { condition, then: $then, else: $else } = props
   const { formatter, value } = useContext(TemplateContext)
-
-  const record = recordExpr(condition)
+  const { valueMap } = useContext(TemplateExpressionContext)
+  const [record, kit] = useMemo(() => recordExprAndKit(condition), [condition])
 
   if (!record) {
+    // TODO: show warning
     return null
   }
 
@@ -63,32 +84,64 @@ export function If<V>(props: IfProps<V>) {
   const elseNode = typeof $else === 'function' ? $else() : $else
 
   if (value) {
-    return replayExpr(record, value) ? thenNode : elseNode
+    const currentValueMap = new Map([...valueMap.entries(), [kit, value]])
+    return replayExpr(record, currentValueMap) ? thenNode : elseNode
   } else {
     return formatter.condition(record, thenNode, elseNode)
   }
 }
 
-export interface ForEachProps<V, R> {
+export interface ForEachProps<V = any, R = any> {
   source: Expression<V, R[]>
   render: (v: R, i: number, source: R[]) => ReactNode
 }
 
 export function ForEach<V = any, R = any>(props: ForEachProps<V, R>) {
   const { value } = useContext(TemplateContext)
-
+  const { valueMap } = useContext(TemplateExpressionContext)
   const { source, render } = props
 
-  const record = recordExpr(source)
+  const [sourceRecord, sourceKit] = useMemo(() => recordExprAndKit(source), [source])
+  const [renderChildren, renderKit, renderIndexKit, renderSourceKit] = useMemo(() => {
+    const renderKit = createKit()
+    const indexKit = createKit()
+    const renderSourceKit = createKit()
+    const children = render(
+      (renderKit as unknown) as R,
+      (indexKit as unknown) as number,
+      (renderSourceKit as unknown) as R[],
+    )
 
-  if (!record) {
-    return []
+    return [children, renderKit, indexKit, renderSourceKit]
+  }, [render])
+
+  if (!sourceRecord) {
+    return null
   }
 
   if (value) {
-    const source: any[] = replayExpr(record, value)
-    return source.map(render)
+    const currentValueMap = new Map([...valueMap.entries(), [sourceKit, value]])
+    const items: any[] = replayExpr(sourceRecord, currentValueMap)
+    return (
+      <Fragment>
+        {items.map((item, index) => (
+          <TemplateExpressionContext.Provider
+            value={{
+              valueMap: new Map([
+                ...currentValueMap,
+                [renderKit, item],
+                [renderIndexKit, index],
+                [renderSourceKit, items],
+              ]),
+            }}
+          >
+            {renderChildren}
+          </TemplateExpressionContext.Provider>
+        ))}
+      </Fragment>
+    )
   } else {
     // TODO: it's a little hard
+    return null
   }
 }

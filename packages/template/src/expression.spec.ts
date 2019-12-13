@@ -4,10 +4,8 @@ import {
   ExpAction,
   replayExpr,
   ExpressionRecordCallAction,
-  isExprKit,
   ExpressionRecord,
   ExpressionRecordGetAction,
-  ExpressionOriginalRoot,
   ExpressionRecordType,
   Eq,
   Ne,
@@ -19,6 +17,7 @@ import {
   Or,
   Not,
   createKit,
+  Expression,
 } from './expression'
 
 function assertNotNull<T>(val: T): asserts val is NonNullable<T> {
@@ -95,48 +94,41 @@ describe('recordExpr', () => {
     expect(lop.names).toEqual(['a'])
     expect(rop.names).toEqual(['b'])
   })
+
+  it.skip('should show warning when use kit as index', () => {})
 })
 
 describe('replayExpr', () => {
-  function replay(record: ExpressionRecord, value: any) {
-    return replayExpr(record, new Map([[ExpressionOriginalRoot, value]]))
+  function recordAndEval(expr: Expression<any>, value: any) {
+    const root = createKit()
+    const record = recordExpr(() => expr(root))
+    assertNotNull(record)
+    return replayExpr(record, new Map([[root, value]]))
   }
 
   it('should works for normal property', () => {
-    const record = recordExpr(v => v.a.b)
-    assertNotNull(record)
-    expect(replay(record, { a: { b: 1 } })).toBe(1)
+    expect(recordAndEval(v => v.a.b, { a: { b: 1 } })).toBe(1)
   })
 
   it('should works for func call', () => {
-    const record = recordExpr(v => v.a())
-    assertNotNull(record)
-    expect(replay(record, { a: () => 1 })).toBe(1)
+    expect(recordAndEval(v => v.a(), { a: () => 1 })).toBe(1)
   })
 
   it('should works for func with args', () => {
-    const record = recordExpr(v => v.pluswith(v.a, v.b))
-    assertNotNull(record)
-    expect(replay(record, { a: 1, b: 2, pluswith: (a: number, b: number) => a + b })).toBe(3)
+    expect(recordAndEval(v => v.pluswith(v.a, v.b), { a: 1, b: 2, pluswith: (a: number, b: number) => a + b })).toBe(3)
   })
 
   it('should works when get value from func result', () => {
-    const record = recordExpr(v => v.a().b)
-    assertNotNull(record)
-    expect(replay(record, { a: () => ({ b: 1 }) })).toBe(1)
+    expect(recordAndEval(v => v.a().b, { a: () => ({ b: 1 }) })).toBe(1)
   })
 
   it('should works when curring function call', () => {
-    const record = recordExpr(v => v.a()())
-    assertNotNull(record)
-    expect(replay(record, { a: () => () => 1 })).toBe(1)
+    expect(recordAndEval(v => v.a()(), { a: () => () => 1 })).toBe(1)
   })
 
   it('should return boolean for relational operator', () => {
-    const record = recordExpr(v => Eq(v.a, v.b))
-    assertNotNull(record)
-    expect(replay(record, { a: 1, b: 2 })).toBe(false)
-    expect(replay(record, { a: 1, b: 1 })).toBe(true)
+    expect(recordAndEval(v => Eq(v.a, v.b), { a: 1, b: 2 })).toBe(false)
+    expect(recordAndEval(v => Eq(v.a, v.b), { a: 1, b: 1 })).toBe(true)
   })
 
   it.each<[string, any, [any, any], [any, any]]>([
@@ -149,20 +141,16 @@ describe('replayExpr', () => {
     ['And', And, [true, true], [true, false]],
     ['Or', Or, [true, false], [false, false]],
   ])('should return correct boolean for %s', (_, func, [tva, tvb], [fva, fvb]) => {
-    const record = recordExpr(v => func(v.a, v.b))
-    assertNotNull(record)
-    expect(replay(record, { a: tva, b: tvb })).toBe(true)
-    expect(replay(record, { a: fva, b: fvb })).toBe(false)
+    expect(recordAndEval(v => func(v.a, v.b), { a: tva, b: tvb })).toBe(true)
+    expect(recordAndEval(v => func(v.a, v.b), { a: fva, b: fvb })).toBe(false)
   })
 
   it('should return correct boolean for Not', () => {
-    const record = recordExpr(v => Not(v.a))
-    assertNotNull(record)
-    expect(replay(record, { a: true })).toBe(false)
-    expect(replay(record, { a: false })).toBe(true)
+    expect(recordAndEval(v => Not(v.a), { a: true })).toBe(false)
+    expect(recordAndEval(v => Not(v.a), { a: false })).toBe(true)
   })
 
-  it.only('should support multi root value', () => {
+  it('should support multi root value', () => {
     const ra = createKit()
     const rb = createKit()
     const record = recordExpr(() => And(ra.v, rb.v))

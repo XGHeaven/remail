@@ -35,5 +35,12 @@
   },
   "peerDependencies": {
     "react": "16"
+  },
+  "dependencies": {
+    "@remail/renderer": "^0.0.2"
+  },
+  "devDependencies": {
+    "@types/react-dom": "^16.9.4",
+    "react-dom": "^16.12.0"
   }
 }

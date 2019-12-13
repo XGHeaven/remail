@@ -194,7 +194,8 @@ export function createKit(record: ExpressionRecord | null = null): ExpressionKit
         return record
       }
       if (typeof name === 'symbol') {
-        throw new Error('Cannot use symbol as key for template')
+        // TODO: 对一些常用的 symbol 进行处理
+        throw new Error(`Cannot use ${String(name)} symbol as key for template`)
       }
       const childRecord = createRecord(ExpAction.Get, {
         root: getRootFromRecord(record) || kit,
@@ -254,6 +255,12 @@ export function isExpressionRecord(record: any): record is ExpressionRecord {
 export function recordExpr<T = any>(expr: Expression<T>): ExpressionRecord | null {
   const finalKit = expr((createKit() as unknown) as T)
   return getExprRecordFromKit(finalKit)
+}
+
+export function recordExprAndKit<T = any>(expr: Expression<T>): [ExpressionRecord | null, ExpressionKit] {
+  const kit = createKit()
+  const finalKit = expr((kit as unknown) as T)
+  return [getExprRecordFromKit(finalKit), kit]
 }
 
 /**
