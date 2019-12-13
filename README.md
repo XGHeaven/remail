@@ -7,6 +7,7 @@
 - Easy to use
 - Compatility with React
 - Builtin layout to compact with many email clients
+- Support different template syntax with `TemplateFormatter`
 - Powerful plugin support
   - support css-in-js/css module
   - transform className to inline style
@@ -111,6 +112,88 @@ render(<App/>, document.getElementById('app')!)
 ```
 
 It's done. Just run `parcel serve dev.browser.ts` and open `localhost:1234` to start happy coding.
+
+## Why not use `react-dom/server`
+
+Of casue, you can use `react-dom/server` to render component.
+If you want to use more powerful feature. `react-dom/server` cannot do it.
+`@remail/renderer` privide plugin to help you do powerful feature.
+
+The another ways, `react-dom/server` support full feature of react.
+But most of those are not necessary for email template. Such as `Suspense`/`Memo`/`Lazy`/`CONCURRENT`.
+`@remail/renderer` removes most of those. Only support `Function/Class Component`/`Context`.
+So it's faster than `react-dom/server`
+
+## TemplateFormatter
+
+### Why use this?
+
+Sometimes, The email service interplate value into email template with different syntax.
+For example, Golang use `template/html`, Node.js use `ejs`.
+So we need to prebuild react component to static file suffix with `.html` which has interplate syntax.
+
+Here use Golang `template/html` as example.
+
+```js
+function App() {
+  return <div>{`{{.Value}}`}</div>
+}
+
+// after build App
+`<div>{{.Value}}</div>`
+```
+
+It'w works but not friendly for development. Because it's always output `{{.Value}}` in browser.
+If there have more complex syntax, Such as `loop` `if` `switch`, It's hard to read and maintainable.
+
+### Quick Start
+
+All content come from `@remail/template`.
+
+```js
+import { TemplateProvider, GolangTemplateFormatter, If, Interpolate } from '@remail/template'
+
+function App() {
+  return (
+    <div>
+      <h1>
+        <Interpolate expr={v => v.Title}/>
+      </h1>
+      <If
+        condition={v => v.HasContent}
+        then={<div><Interpolate expr={v.Content}/></div>}
+        else={<div>No Content</div>}
+      />
+    </div>
+  )
+}
+
+// in browser for development. This would render real value from context.
+ReactDOM.render(
+  <TemplateProvider value={{
+    formatter: new GolangTemplateFormatter(),
+    value: {
+      Title: 'xxx',
+      HasContent: true,
+      Content: 'content'
+    }
+  }}>
+    <App/>
+  </TemplateProvider>,
+  document.getElementById('div')
+)
+
+// in server for build or production. This would render special template syntax.
+renderToString(
+  <TemplateProvider value={{
+    formatter: new GolangTemplateFormatter(),
+    // value is not needed
+    // value: {}
+  }}>
+    <App/>
+  </TemplateProvider>
+)
+```
 
 ## Thanks
 

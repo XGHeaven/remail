@@ -420,6 +420,7 @@ export class RemailRenderer {
             return yield* this.generateNextNode(newChildren)
           }
           default:
+            console.warn(`Cannot support ${String($$typeof)} as jsx element`)
             return yield ''
         }
       }
