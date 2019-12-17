@@ -1,4 +1,5 @@
 import { ReactNode, ReactElement, isValidElement, Context, ClassicComponentClass, FC, createElement } from 'react'
+import { SyncHook, SyncWaterfallHook, Hook } from 'tapable'
 import { escapeTextForBrowser } from './react-server-render/escapeTextForBrowser'
 import {
   REACT_PROVIDER_TYPE,
@@ -123,29 +124,33 @@ function isSelfCloseTag(tag: string) {
 }
 
 export interface RendererPlugin {
+  install(renderer: RemailRenderer): any
+}
+
+export interface RendererPluginHooks {
   /**
    * 在 props 对象进行处理之前执行。传入的参数为最原始的 props 对象。
    * 建议在修改前先 clone 一份，并返回 clone 之后的对象
    */
-  normalizeProps?: RendererNormalizePropsHook
+  normalizeProps: Hook<OriginalProps, ReactElement, void, OriginalProps | void, OriginalProps>
   /**
    * 在 props 对象标准化之后执行，其中 value 为字符串或者 true。
    * 会自动剔除空值的 props，以及对 style 等元素进行序列化。
    * 当元素的值为字符串的时候，表示 `key="value"`。如果为 true，则表示 `key`
    */
-  stringifyProps?: RendererStringifyPropsHook
+  stringifyProps: Hook<NormalizedProps, ReactElement, void, NormalizedProps | void, NormalizedProps>
   /**
    * 提供对 Element 遍历的能力，如果要进行修改，可以直接调用 React.cloneElement
    */
-  visit?: RendererVisitHook
+  visit: Hook<ReactElement, void, void, ReactElement | null | void, ReactElement | null>
   /**
    * 开始的钩子，提供直接修改根组件的能力
    */
-  begin?: RendererBeginHook
+  begin: Hook<ReactElement, void, void, ReactElement | void, ReactElement>
   /**
    * 结束的钩子
    */
-  end?: RendererEndHook
+  end: Hook<ReactElement, void, void, void, void>
 }
 
 export type OriginalProps = Readonly<Record<string, any>>
@@ -174,14 +179,81 @@ const defaultOptions: RemailRendererOptions = {
   plugins: [],
 }
 
+// hack: tapable not support bail out in waterfall hook
+function passUndefinedHook(hook: Hook<any>) {
+  hook.intercept({
+    register(tap) {
+      const { fn } = tap
+
+      return {
+        ...tap,
+        fn: (arg1: any, ...others: any[]) => {
+          const value = fn(arg1, ...others)
+          if (value === void 0) {
+            return arg1
+          }
+
+          return value
+        },
+      }
+    },
+  })
+
+  return hook
+}
+
+function bailoutNullHook(hook: Hook<any>) {
+  hook.intercept({
+    register(tap) {
+      const { fn } = tap
+
+      return {
+        ...tap,
+        fn(arg1: any, ...others: any[]) {
+          if (arg1 === null) {
+            return null
+          }
+
+          return fn(arg1, ...others)
+        },
+      }
+    },
+  })
+  return hook
+}
+
 export class RemailRenderer {
   private contextStack: any[] = []
   options: RemailRendererOptions
-  it: Iterator<string, void, void> | null = null
+  private it: Iterator<string, void, void> | null = null
   finished = false
+  hooks: RendererPluginHooks
 
   constructor(private rootElement: ReactElement, options: Partial<RemailRendererOptions> = {}) {
     this.options = Object.assign({}, defaultOptions, options)
+
+    this.hooks = {
+      normalizeProps: passUndefinedHook(
+        new SyncWaterfallHook<any>(['props', 'element']),
+      ),
+      stringifyProps: passUndefinedHook(
+        new SyncWaterfallHook<any>(['props', 'element']),
+      ),
+      visit: bailoutNullHook(
+        passUndefinedHook(
+          new SyncWaterfallHook<any>(['node']),
+        ),
+      ),
+      begin: passUndefinedHook(
+        new SyncWaterfallHook<any>(['root']),
+      ),
+      end: new SyncHook(),
+    }
+
+    for (const plugin of this.options.plugins) {
+      plugin.install(this)
+    }
+
     // wrap element with RendererContext
     this.rootElement = createElement(
       RendererContext.Provider,
@@ -190,37 +262,21 @@ export class RemailRenderer {
     )
   }
 
-  private hook<N extends keyof RendererPlugin>(
+  private hook<N extends keyof RendererPluginHooks>(
     name: N,
-    ...args: Parameters<NonNullable<RendererPlugin[N]>>
-  ): NonUndefined<ReturnType<NonNullable<RendererPlugin[N]>>> {
-    const [, ...rest] = args
-    let ret = args[0]
-    for (const plugin of this.options.plugins) {
-      const hook = plugin[name]
-      if (hook) {
-        const newRet = (hook as any).apply(plugin, [ret, ...rest])
-        if (newRet !== undefined) {
-          ret = newRet
-        }
-      }
-
-      if (ret === null) {
-        return ret
-      }
-    }
-
-    return ret as any
+    ...args: Parameters<RendererPluginHooks[N]['call']>
+  ): ReturnType<RendererPluginHooks[N]['call']> {
+    return this.hooks[name].call(...args) as any
   }
 
-  pushProvider(context: Context<any>, value: any) {
+  private pushProvider(context: Context<any>, value: any) {
     const internalContext: any = (context as any)._context
     const preValue = internalContext._currentValue
     this.contextStack.push(preValue)
     internalContext._currentValue = value
   }
 
-  popProvider(context: Context<any>) {
+  private popProvider(context: Context<any>) {
     const value = this.contextStack.pop()
     ;(context as any)._context._currentValue = value
     return value
@@ -244,7 +300,7 @@ export class RemailRenderer {
     return value || ''
   }
 
-  *generateNextNode(node: ReactNode): Generator<string, void, void> {
+  private *generateNextNode(node: ReactNode): Generator<string, void, void> {
     if (typeof node === 'undefined' || node === null || typeof node === 'boolean') {
       yield ''
     } else if (typeof node === 'string' || typeof node === 'number') {

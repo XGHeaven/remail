@@ -35,5 +35,11 @@
   },
   "peerDependencies": {
     "react": "16"
+  },
+  "dependencies": {
+    "tapable": "^1.1.3"
+  },
+  "devDependencies": {
+    "@types/tapable": "^1.0.4"
   }
 }

@@ -1,5 +1,5 @@
 import React, { FC, createContext, useContext, Fragment, StrictMode, ReactElement, Component } from 'react'
-import { RemailRenderer, RemailRendererOptions, RendererPlugin } from './renderer'
+import { RemailRenderer, RemailRendererOptions, RendererPlugin, RendererPluginHooks } from './renderer'
 
 function run(element: ReactElement<any>, options: Partial<RemailRendererOptions> = {}) {
   const renderer = new RemailRenderer(element, options)
@@ -11,7 +11,7 @@ function run(element: ReactElement<any>, options: Partial<RemailRendererOptions>
 }
 
 describe('renderer/RemailRenderer', () => {
-  describe('#render', () => {
+  describe('render for element', () => {
     it('should works for host component', () => {
       expect(run(<div>host</div>)).toBe('<div>host</div>')
     })
@@ -192,43 +192,58 @@ describe('renderer/RemailRenderer', () => {
     })
   })
 
-  describe('#hook', () => {
-    function call<T extends (v: V, ...args: any[]) => V | null | undefined, V = any>(
+  describe('options.plugin', () => {
+    function runPlugin(element: ReactElement, plugin: { [K in keyof RendererPluginHooks]?: (...args: any[]) => any }) {
+      return run(element, {
+        plugins: [
+          {
+            install({ hooks }) {
+              for (const key in plugin) {
+                const fn = (plugin as any)[key]
+                if (fn) {
+                  ;(hooks as any)[key].tap('test', fn)
+                }
+              }
+            },
+          },
+        ],
+      })
+    }
+
+    function callVisit<T extends (v: V, ...args: any[]) => V | null | undefined, V = any>(
       funcs: T[],
       ...args: [V, ...any[]]
     ): any {
       return (new RemailRenderer((<div>1</div>), {
-        plugins: funcs.map(func => ({ visit: func as any })),
+        plugins: funcs.map(func => ({
+          install({ hooks }) {
+            hooks.visit.tap('test', func as any)
+          },
+        })),
       }) as any).hook('visit', ...args)
     }
 
     it('should return original argument when no funcs', () => {
-      expect(call([], 1)).toBe(1)
+      expect(callVisit([], 1)).toBe(1)
     })
 
     it('should ignore undefined return value', () => {
-      expect(call([v => undefined], 1)).toBe(1)
+      expect(callVisit([v => undefined], 1)).toBe(1)
     })
 
     it('should continue to call when return undefined', () => {
-      expect(call([v => v + 1, v => undefined, v => v + 1], 0)).toBe(2)
+      expect(callVisit([v => v + 1, v => undefined, v => v + 1], 0)).toBe(2)
     })
 
     it('should returns null when one of func returns null', () => {
-      expect(call([v => v, v => null], 1)).toBeNull()
+      expect(callVisit([v => v, v => null], 1)).toBeNull()
     })
 
-    it('should break call chain when one of func returns null', () => {
+    it('should bailout when one of func returns null', () => {
       const fn = jest.fn((v: number) => v + 1)
-      expect(call([fn, v => null, fn], 0)).toBe(null)
+      expect(callVisit([fn, v => null, fn], 0)).toBe(null)
       expect(fn).toBeCalledTimes(1)
     })
-  })
-
-  describe('options.plugin', () => {
-    function runPlugin(element: ReactElement, plugin: RendererPlugin) {
-      return run(element, { plugins: [plugin] })
-    }
 
     it('.normalizeProps should run before stringify props', () => {
       const element = (
@@ -248,7 +263,7 @@ describe('renderer/RemailRenderer', () => {
       expect(fn.mock.calls[0][0]).toEqual(expected)
     })
 
-    it('.normalizeProps should change props by return a new one', () => {
+    it('normalizeProps hook should change props by return a new one', () => {
       const fn = jest.fn(v => ({
         ...v,
         className: 'ohhhh',
@@ -263,7 +278,7 @@ describe('renderer/RemailRenderer', () => {
       )
     })
 
-    it('.stringifyProps should change result by return a new one', () => {
+    it('stringifyProps hook should change result by return a new one', () => {
       const fn = jest.fn(v => ({
         ...v,
         class: 'yeah',
@@ -276,7 +291,7 @@ describe('renderer/RemailRenderer', () => {
       )
     })
 
-    it('.visit should change element by return a new or clone element', () => {
+    it('visit hook should change element by return a new or clone element', () => {
       const Placeholder = () => null
       const fn = jest.fn(node => {
         if (node.type === Placeholder) {
@@ -294,6 +309,20 @@ describe('renderer/RemailRenderer', () => {
           { visit: fn },
         ),
       ).toBe(`<div>1<i>I</i>2</div>`)
+    })
+
+    it('begin hook should called', () => {
+      const begin = jest.fn(v => v)
+      runPlugin(<div>1</div>, {
+        begin,
+      })
+
+      expect(begin).toBeCalled()
+    })
+
+    it('begin hook should change root element', () => {
+      const begin = jest.fn(v => <i>{v}</i>)
+      expect(runPlugin(<i>1</i>, { begin })).toBe('<i><i>1</i></i>')
     })
   })
 })
