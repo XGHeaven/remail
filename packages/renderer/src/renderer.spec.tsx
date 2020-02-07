@@ -1,5 +1,5 @@
-import React, { FC, createContext, useContext, Fragment, StrictMode, ReactElement, Component } from 'react'
-import { RemailRenderer, RemailRendererOptions, RendererPlugin, RendererPluginHooks } from './renderer'
+import React, { FC, createContext, useContext, Fragment, StrictMode, ReactElement, Component, useState, useMemo, useRef } from 'react'
+import { RemailRenderer, RemailRendererOptions, RendererPluginHooks } from './renderer'
 
 function run(element: ReactElement<any>, options: Partial<RemailRendererOptions> = {}) {
   const renderer = new RemailRenderer(element, options)
@@ -34,6 +34,40 @@ describe('renderer/RemailRenderer', () => {
       expect(run(<App />)).toBe('<div>app</div>')
     })
 
+    it.each([
+      [
+        'useState with val parameter',
+        () => {
+          const [val] = useState('val')
+          return <i>{val}</i>
+        },
+        '<i>val</i>'
+      ], [
+        'useState with factory parameter',
+        () => <i>{useState(() => 'val')[0]}</i>,
+        '<i>val</i>'
+      ], [
+        'useMemo',
+        () => <i>{useMemo(() => 'memo', [])}</i>,
+        '<i>memo</i>'
+      ], [
+        'useRef without initial value',
+        () => {
+          const ref = useRef<any>()
+          expect(ref.current).toBeUndefined()
+          ref.current = 'lazy'
+          return <i>{ref.current}</i>
+        },
+        '<i>lazy</i>'
+      ], [
+        'use with initial value',
+      () => <i>{useRef('init').current}</i>,
+      '<i>init</i>'
+      ]
+    ])('should support function component using %s', (name, App, expected) => {
+      expect(run(<App/>)).toBe(expected)
+    })
+
     it('should works for class component', () => {
       class App extends Component {
         render() {
@@ -66,7 +100,7 @@ describe('renderer/RemailRenderer', () => {
       expect(run(<style dangerouslySetInnerHTML={{ __html: '<i>x</i>' }}></style>)).toBe('<style><i>x</i></style>')
     })
 
-    it('should works for classic context', () => {
+    it('should works for context render callback', () => {
       const Context = createContext(false)
       let value!: boolean
       run(
@@ -82,7 +116,7 @@ describe('renderer/RemailRenderer', () => {
       expect(value).toBe(true)
     })
 
-    it('should works for context with hooks', () => {
+    it('should works with context by hooks', () => {
       const Context = createContext(false)
       const App: FC<any> = () => {
         const value = useContext(Context)
