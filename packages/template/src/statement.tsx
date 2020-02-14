@@ -69,13 +69,13 @@ export interface IfProps<V = any> {
   else?: ReactNode | (() => ReactNode)
 }
 
-export function If<V>(props: IfProps<V>) {
+export function If<V = any>(props: IfProps<V>) {
   const { condition, then: $then, else: $else } = props
   const { formatter, value } = useContext(TemplateContext)
   const { valueMap } = useContext(TemplateExpressionContext)
   const [record, kit] = useMemo(() => recordExprAndKit(condition), [condition])
 
-  if (!record) {
+  if (record === undefined || record === null) {
     // TODO: show warning
     return null
   }

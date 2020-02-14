@@ -7,10 +7,10 @@
  *   上面的这些值虽然都是从元根也就是模板变量中获得的，但是在行为上和元根类似，两者没有交集。所以可能会存在多个元根，也可以定义为一个真元根和若干个假元根（衍生元根）
  * - 链接节点，该节点有且只有一个父节点，并且与父节点存在一个关系，目前有取值(Get)。
  * - 联合节点，可以整合其他节点(比如各种逻辑关系等等)，也就是说可以存在多个父节点。父节点之间可以没有任何关系，以及该节点和父节点之间也可以没有任何关系。
- *   而调用(Call)也属于联合节点，因为他可能会接受很多其他的参数。
- * - 虚根，联合节点也是一种虚根，只不过这个根是动态计算出来的，而非一开始就制定好的。一切从虚根上出发的链接节点都将以虚根作为真实的根。
+ *   而调用(Call)也属于联合节点，因为他可能会接受很多其他的参数。包括各种比较函数
+ * - 虚根，联合节点也是一种虚根，只不过这个根是动态计算出来的，而非一开始就指定好的。一切从虚根上出发的链接节点都将以虚根作为真实的根。
  *
- * 并且该图有且只有一个出读为 0 的节点，不论是链接节点还是联合节点还是根，有且只有一个。
+ * 并且该图有且只有一个出度为 0 的节点，不论是链接节点还是联合节点还是根，有且只有一个。
  *
  * 在 eval 模式下，我们需要知道每个根所代表的的 value 是多少，所以需要一个 value map。而每一个链接节点都存储了他的根是多少，方便判断。
  * 联合节点来说，有可能会有根信息，也有可能会没有根信息。
@@ -394,3 +394,14 @@ export const Lt = createBinaryOperator<boolean>(ExpAction.Lt)
 export const Ge = createBinaryOperator<boolean>(ExpAction.Ge)
 export const Le = createBinaryOperator<boolean>(ExpAction.Le)
 export const Not = createUnaryOperator<boolean>(ExpAction.Not)
+export const Logic = {
+  And : createBinaryOperator<boolean>(ExpAction.And),
+  Or : createBinaryOperator<boolean>(ExpAction.Or),
+  Eq : createBinaryOperator<boolean>(ExpAction.Eq),
+  Ne : createBinaryOperator<boolean>(ExpAction.Ne),
+  Gt : createBinaryOperator<boolean>(ExpAction.Gt),
+  Lt : createBinaryOperator<boolean>(ExpAction.Lt),
+  Ge : createBinaryOperator<boolean>(ExpAction.Ge),
+  Le : createBinaryOperator<boolean>(ExpAction.Le),
+  Not : createUnaryOperator<boolean>(ExpAction.Not)
+}

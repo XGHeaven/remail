@@ -1,7 +1,7 @@
 import React, { ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { Expression } from './expression'
-import { TemplateProvider, Interpolate, TemplateExpressionContext, ForEach } from './statement'
+import { Expression, Logic } from './expression'
+import { TemplateProvider, Interpolate, TemplateExpressionContext, ForEach, If } from './statement'
 import { createKit } from '../lib'
 
 describe('Interpolate', () => {
@@ -71,7 +71,52 @@ describe('Interpolate', () => {
   })
 })
 
-describe('ForEach', () => {
+describe('If', () => {
+  it('should render then node', () => {
+    expect(renderToStaticMarkup(
+      <TemplateProvider value={{ formatter: {} as any, value: {count: 10}}}>
+        <If
+          condition={v => Logic.Gt(v.count, 9)}
+          then={<Interpolate expr={v =>v.count}/>}
+        />
+      </TemplateProvider>
+    )).toBe('10')
+  })
+
+  it('should render false node', () => {
+    expect(renderToStaticMarkup(
+      <TemplateProvider value={{formatter: {} as any, value: {count: 10}}}>
+        <If
+          condition={v => Logic.Le(v.count, 9)}
+          then={null}
+          else={<Interpolate expr={v => v.count}/>}
+        />
+      </TemplateProvider>
+    )).toBe('10')
+  })
+
+  it('should accept function', () => {
+    const node = <If
+      condition={v => Logic.Eq(v.count, 10)}
+      then={() => 'then'}
+      else={() => 'else'}
+    />
+
+    expect(renderToStaticMarkup(
+      <TemplateProvider value={{formatter: {} as any, value: {count: 10}}}>
+        {node}
+      </TemplateProvider>
+    )).toBe('then')
+
+    expect(renderToStaticMarkup(
+      <TemplateProvider value={{formatter: {} as any, value: {count: 1}}}>
+        {node}
+      </TemplateProvider>
+    )).toBe('else')
+  })
+})
+
+describe.only('ForEach', () => {
   function testForEach(
     dataSource: any[],
     render: (v: any, i: any, vs: any[]) => ReactNode,
@@ -90,7 +135,7 @@ describe('ForEach', () => {
     return html
   }
 
-  it('should render object dataSource', () => {
+  it('should render object value dataSource', () => {
     testForEach(
       [{ foo: '1' }, { foo: '2' }, { foo: '3' }],
       v => (
@@ -102,7 +147,7 @@ describe('ForEach', () => {
     )
   })
 
-  it.skip('should render primary dataSource', () => {
+  it.skip('should render primary value dataSource', () => {
     testForEach(
       [1, 2, 3],
       v => (

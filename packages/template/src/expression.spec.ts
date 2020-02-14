@@ -106,6 +106,10 @@ describe('replayExpr', () => {
     return replayExpr(record, new Map([[root, value]]))
   }
 
+  it('should correct replay with primary value', () => {
+    expect(recordAndEval(v => v, 'primary')).toBe('primary')
+  })
+
   it('should works for normal property', () => {
     expect(recordAndEval(v => v.a.b, { a: { b: 1 } })).toBe(1)
   })
