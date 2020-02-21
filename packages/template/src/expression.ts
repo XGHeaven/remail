@@ -6,9 +6,10 @@
  *   所以理论上只需要一个元根，但是实际上可能很有很多衍生元根，比如说定义一个变量，取值自模板值。或者针对循环语句每次的循环值。
  *   上面的这些值虽然都是从元根也就是模板变量中获得的，但是在行为上和元根类似，两者没有交集。所以可能会存在多个元根，也可以定义为一个真元根和若干个假元根（衍生元根）
  * - 链接节点，该节点有且只有一个父节点，并且与父节点存在一个关系，目前有取值(Get)。
- * - 联合节点，可以整合其他节点(比如各种逻辑关系等等)，也就是说可以存在多个父节点。父节点之间可以没有任何关系，以及该节点和父节点之间也可以没有任何关系。
- *   而调用(Call)也属于联合节点，因为他可能会接受很多其他的参数。包括各种比较函数
+ * - 联合节点，可以整合其他节点(比如各种逻辑关系等等)，但依旧只有一个节点。
+ *   比如调用(Call)属于联合节点，因为他可能会接受很多其他的参数。包括各种比较函数
  * - 虚根，联合节点也是一种虚根，只不过这个根是动态计算出来的，而非一开始就指定好的。一切从虚根上出发的链接节点都将以虚根作为真实的根。
+ * - 边数据。因为每个节点有且只有一个父节点，所以可以直接将边数据存储在每个节点上
  *
  * 并且该图有且只有一个出度为 0 的节点，不论是链接节点还是联合节点还是根，有且只有一个。
  *
@@ -18,164 +19,94 @@
 
 export type Expression<T = any, R = any> = (params: T) => R
 
-export const ExpressionRecordSymbol = Symbol.for('remail-expression-record')
-export const IsExpressionRecord = Symbol.for('remail-expression-is-record')
+// export const ExpressionRecordSymbol = Symbol.for('remail.expression.record')
+export const IsExpressionRecord = Symbol.for('remail.expression.is-record')
+export const ExpressionKitSymbol = Symbol.for('remail.expression-kit')
+export const ExpressionKitAccompanySymbol = Symbol.for('remail.expression.accompany-value')
+export const ExpressionKitPaths = Symbol.for('remail.expression-kit.paths')
+export const ExpressionKitParent = Symbol.for('remail.expression-kit.parent')
+export const ExpressionKitRoot = Symbol.for('remail.expression-kit.root')
+export const ExpressionKitRelation = Symbol.for('remail.expression-kit.relation')
+export const ExpressionKitBridgeSymbol = Symbol.for('remail.expression-kit.bridge')
 
-// TODO: add/sub/inc/dec/mul/div/concat(for string)
+export interface ExpressionKitBridgeBase {
+  from: ExpressionKit
+  dest: ExpressionKit
+}
+
+export interface ExpressionKitBridgeOfGet extends ExpressionKitBridgeBase {
+  action: ExpAction.Get
+  name: string | number
+}
+
+export interface ExpressionKitBridgeOfCall extends ExpressionKitBridgeBase {
+  action: ExpAction.Call,
+  args: any[]
+}
+
+export type ExpressionKitBridge = ExpressionKitBridgeOfGet | ExpressionKitBridgeOfCall
+
 export enum ExpAction {
   Get,
   Call,
-  // equal
-  Eq,
-  // not equal
-  Ne,
-  // greater than
-  Gt,
-  // less than
-  Lt,
-  // greater equal than
-  Ge,
-  // less equal than
-  Le,
-  And,
-  Or,
-  Not,
 }
 
-export type ExpBinaryAction =
-  | ExpAction.Eq
-  | ExpAction.Ge
-  | ExpAction.Gt
-  | ExpAction.Le
-  | ExpAction.Lt
-  | ExpAction.Ne
-  | ExpAction.Or
-  | ExpAction.And
-export type ExpUnaryAction = ExpAction.Not
+export enum ExpressionRecordType {
+  Get,
+  Call,
+  Value,
+  Root
+}
 
 export interface ExpressionNormalRecord {
-  type: ExpAction
-  // 当前元素的根
-  root: any | null
-  // 存储 record 所属的 kit
-  kit: any
-}
-
-export interface ExpressionChainableRecord extends ExpressionNormalRecord {
-  names: Array<string | number>
-}
-
-export interface ExpressionBinaryRecord extends ExpressionNormalRecord {
-  lop: ExpressionRecord | any
-  rop: ExpressionRecord | any
-}
-
-export interface ExpressionUnaryRecord extends ExpressionNormalRecord {
-  op: ExpressionRecord | any
+  type: ExpressionRecordType
 }
 
 // 虽然 Call 是联合节点，但是为了方便实现这里将其用作链接节点
-export interface ExpressionRecordCallAction extends ExpressionChainableRecord {
-  type: ExpAction.Call
+export interface ExpressionRecordCallAction extends ExpressionNormalRecord {
+  type: ExpressionRecordType.Call
+  func: ExpressionRecord
   args: (ExpressionRecord | any)[] // 支持常量值
 }
 
-export interface ExpressionRecordGetAction extends ExpressionChainableRecord {
-  type: ExpAction.Get
+export interface ExpressionRecordGetAction extends ExpressionNormalRecord {
+  root: ExpressionRecord
+  type: ExpressionRecordType.Get
+  names: Array<string | number>
 }
 
-export interface ExpressionRecordEqual extends ExpressionBinaryRecord {
-  type: ExpAction.Eq
+export interface ExpressionRecordValueAction extends ExpressionNormalRecord {
+  type: ExpressionRecordType.Value,
+  value: any
 }
 
-export interface ExpressionRecordNotEqual extends ExpressionBinaryRecord {
-  type: ExpAction.Ne
+export interface ExpressionRecordRootAction extends ExpressionNormalRecord {
+  type: ExpressionRecordType.Root
+  // 使用这个作为唯一标识
+  kit: ExpressionKit
 }
-
-export interface ExpressionRecordGreater extends ExpressionBinaryRecord {
-  type: ExpAction.Gt
-}
-
-export interface ExpressionRecordLess extends ExpressionBinaryRecord {
-  type: ExpAction.Lt
-}
-
-export interface ExpressionRecordGreaterEqual extends ExpressionBinaryRecord {
-  type: ExpAction.Ge
-}
-
-export interface ExpressionRecordLessEqual extends ExpressionBinaryRecord {
-  type: ExpAction.Le
-}
-
-export interface ExpressionRecordAnd extends ExpressionBinaryRecord {
-  type: ExpAction.And
-}
-
-export interface ExpressionRecordOr extends ExpressionBinaryRecord {
-  type: ExpAction.Or
-}
-
-export interface ExpressionRecordNot extends ExpressionUnaryRecord {
-  type: ExpAction.Not
-}
-
-export type ExpressionRecordObjectAction = ExpressionRecordCallAction | ExpressionRecordGetAction
-
-export type ExpressionRecordRelational =
-  | ExpressionRecordEqual
-  | ExpressionRecordNotEqual
-  | ExpressionRecordGreater
-  | ExpressionRecordLess
-  | ExpressionRecordGreaterEqual
-  | ExpressionRecordLessEqual
-
-export type ExpressionRecordLogical = ExpressionRecordAnd | ExpressionRecordOr | ExpressionRecordNot
-
-export type ExpressionRecord = ExpressionRecordObjectAction | ExpressionRecordRelational | ExpressionRecordLogical
 
 export type ExpressionKit = {
   [key: string]: ExpressionKit
   [key: number]: ExpressionKit
-  [ExpressionRecordSymbol]: ExpressionRecord | null
+  [ExpressionKitBridgeSymbol]: ExpressionKitBridge | null
+  [ExpressionKitAccompanySymbol]: any
+  [ExpressionKitSymbol]: true
 }
 
-function getNamesFromRecord(record: ExpressionRecord | null): Array<string | number> {
-  if (!record) {
-    return []
-  }
-
-  if (record.type === ExpAction.Get) {
-    // only get action can continue chain
-    return record.names
-  }
-
-  return []
+export type ExpressionRecords = {
+  [ExpressionRecordType.Get]: ExpressionRecordGetAction
+  [ExpressionRecordType.Call]: ExpressionRecordCallAction
+  [ExpressionRecordType.Value]: ExpressionRecordValueAction,
+  [ExpressionRecordType.Root]: ExpressionRecordRootAction
 }
 
-function getRootFromRecord(record: ExpressionRecord | null): ExpressionKit | null {
-  if (!record) {
-    return null
-  }
+export type ExpressionRecord = ExpressionRecords[ExpressionRecordType]
 
-  if (record.type === ExpAction.Get) {
-    // only get action can use same context
-    return record.root
-  }
-
-  // other action no context
-  return null
-}
-
-export type ExpressionRecordType<T extends ExpAction, R extends ExpressionRecord = ExpressionRecord> = R extends {
-  type: T
-}
-  ? R
-  : never
-export function createRecord<T extends ExpAction, V extends ExpressionRecord = ExpressionRecordType<T>>(
+export function createRecord<T extends ExpressionRecordType>(
   type: T,
-  record: Omit<V, 'type'>,
-): V {
+  record: Omit<ExpressionRecords[T], 'type'>,
+): ExpressionRecords[T] {
   return {
     type,
     ...record,
@@ -183,66 +114,156 @@ export function createRecord<T extends ExpAction, V extends ExpressionRecord = E
   } as any
 }
 
-export function createKit(record: ExpressionRecord | null = null): ExpressionKit {
+const defaultHandlers: ProxyHandler<Function> = {
+  // TODO: 对其他的 handler 进行处理
+  has(_, key) {
+    if (typeof key !== 'symbol') {
+      return true
+    } else {
+      switch(key) {
+        case ExpressionKitSymbol:
+          return true
+        default:
+          return false
+      }
+    }
+  },
+  ownKeys() {
+    return []
+  },
+}
+
+export function createKit(selfBridge: ExpressionKitBridge | null = null): ExpressionKit {
   // 采用函数作为被代理的对象，目的是既可以支持 Call 又可以支持 Get
   const scapegoat = function scapegoat() {}
+  const bridges = new Map<string | number, ExpressionKitBridge>()
+  let accompany: any = null
 
-  const kit: any = new Proxy<any>(scapegoat, {
-    // TODO: 对其他的 handler 进行处理
+  const kit = new Proxy<any>(scapegoat, {
+    ...defaultHandlers,
     get: (_, name) => {
-      if (name === ExpressionRecordSymbol) {
-        return record
-      }
       if (typeof name === 'symbol') {
         // TODO: 对一些常用的 symbol 进行处理
-        throw new Error(`Cannot use ${String(name)} symbol as key for template`)
-      }
-      const childRecord = createRecord(ExpAction.Get, {
-        root: getRootFromRecord(record) || kit,
-        names: [...getNamesFromRecord(record), name],
-        kit,
-      })
-      return createKit(childRecord)
-    },
-    apply: (_, _1, args) => {
-      const childRecord = createRecord(ExpAction.Call, {
-        names: getNamesFromRecord(record),
-        args: args.map((arg: any) => (isExprKit(arg) ? getExprRecordFromKit(arg) : arg)),
-        root: getRootFromRecord(record) || kit,
-        kit,
-      })
-
-      return createKit(childRecord)
-    },
-    has(_, key) {
-      if (typeof key !== 'symbol') {
-        return true
-      } else {
-        if (key === ExpressionRecordSymbol) {
-          return true
+        switch(name) {
+          case ExpressionKitBridgeSymbol:
+            return selfBridge
+          case ExpressionKitSymbol:
+            return true
+          case ExpressionKitAccompanySymbol:
+            return accompany
+          case Symbol.toPrimitive:
+            throw new Error('Cannot transform kit to primitive value used by index or others.')
+          default:
+            throw new Error(`Cannot use ${String(name)} symbol as key for expression kit`)
         }
-        return false
       }
+
+      let bridge = bridges.get(name)
+
+      if (bridge) {
+        return bridge.dest
+      }
+
+      bridge = {
+        action: ExpAction.Get,
+        name,
+        from: kit,
+        dest: kit, // placeholder
+      }
+
+      const nextKit = createKit(bridge)
+      bridge.dest = nextKit
+      bridges.set(name, bridge)
+
+      return nextKit
     },
-    ownKeys() {
-      return []
+    apply: (_, __, args) => {
+      const bridge: ExpressionKitBridgeOfCall = {
+        action: ExpAction.Call,
+        args,
+        from: kit,
+        dest: kit, // placeholder
+      }
+
+      const nextKit = createKit(bridge)
+      bridge.dest = nextKit
+      return nextKit
     },
+    set(_, name, value) {
+      if (name === ExpressionKitAccompanySymbol) {
+        accompany = value
+        return true
+      }
+      return false
+    }
   })
 
   return kit
 }
 
-export function getExprRecordFromKit(kit: ExpressionKit): ExpressionRecord
-export function getExprRecordFromKit(kit: any): ExpressionRecord | null
-export function getExprRecordFromKit(kit: any): ExpressionRecord | null {
-  return isExprKit(kit) ? kit[ExpressionRecordSymbol] : null
+export function getExpressionKitBridge(kit: ExpressionKit): ExpressionKitBridge | null {
+  return isExprKit(kit) ? kit[ExpressionKitBridgeSymbol] : null
+}
+
+export function generateRecord(kit: ExpressionKit, records: WeakMap<any, ExpressionRecord> = new WeakMap()): ExpressionRecord {
+  if (!isExprKit(kit)) {
+    return createRecord(ExpressionRecordType.Value, {value: kit})
+  }
+
+  const bridge = getExpressionKitBridge(kit)
+
+  if (bridge === null) {
+    // 对于根来说，是没有边的，所以这里直接使用 kit 代替
+    if (records.has(kit)) {
+      return records.get(kit)!
+    }
+    const record =  createRecord(ExpressionRecordType.Root, {kit})
+    records.set(kit, record)
+    return record
+  } else {
+    if (records.has(bridge)) {
+      return records.get(bridge)!
+    }
+    if (bridge.action === ExpAction.Get) {
+      const names = [bridge.name]
+      let root = bridge.from
+      while(true) {
+        const edge = getExpressionKitBridge(root)
+
+        if (!edge) {
+          break
+        }
+
+        if (edge.action === ExpAction.Get) {
+          // 只有 get 才做才会持续循环并找到虚根
+          root = edge.from
+          names.unshift(edge.name)
+          continue
+        }
+        break
+      }
+      const record = createRecord(ExpressionRecordType.Get, {
+        root: generateRecord(root, records),
+        names
+      })
+      records.set(bridge, record)
+      return record
+    } else {
+      const record = createRecord(ExpressionRecordType.Call, {
+        func: generateRecord(bridge.from, records),
+        args: bridge.args.map(arg => generateRecord(arg))
+      })
+      records.set(bridge, record)
+      return record
+    }
+  }
 }
 
 export function isExprKit(kit: any): kit is ExpressionKit {
   if (typeof kit !== 'function') {
     return false
   }
-  return Reflect.has(kit, ExpressionRecordSymbol)
+  return Reflect.has(kit, ExpressionKitSymbol)
 }
 
 export function isExpressionRecord(record: any): record is ExpressionRecord {
@@ -252,15 +273,37 @@ export function isExpressionRecord(record: any): record is ExpressionRecord {
 /**
  * Record expression to a record. You can use this record to replay or format it to template syntax
  */
-export function recordExpr<T = any>(expr: Expression<T>): ExpressionRecord | null {
-  const finalKit = expr((createKit() as unknown) as T)
-  return getExprRecordFromKit(finalKit)
+export function recordExpr<T = any>(expr: Expression<T>): ExpressionRecord {
+  return recordExprAndKit(expr)[0]
 }
 
-export function recordExprAndKit<T = any>(expr: Expression<T>): [ExpressionRecord | null, ExpressionKit] {
+export function recordExprAndKit<T = any>(expr: Expression<T>): [ExpressionRecord, ExpressionKit, ExpressionKit] {
   const kit = createKit()
   const finalKit = expr((kit as unknown) as T)
-  return [getExprRecordFromKit(finalKit), kit]
+  return [generateRecord(finalKit), kit, finalKit]
+}
+
+export function _replayExpr(record: ExpressionRecord, valueMap: WeakMap<any, any>): any {
+  if (valueMap.has(record)) {
+    return valueMap.get(record)
+  }
+
+  switch(record.type) {
+    case ExpressionRecordType.Root: {
+      const { kit } = record
+      // 这里不再使用 record 作为缓存 key，而是用 kit
+      return valueMap.has(kit) ? valueMap.get(kit) : kit[ExpressionKitAccompanySymbol]
+    }
+    case ExpressionRecordType.Value:
+      // TODO: 有可能是复合型值，要递归深入去考虑
+      return record.value
+    case ExpressionRecordType.Get:
+      const root = _replayExpr(record.root, valueMap)
+      return record.names.reduce((v, n) => v[n], root)
+    case ExpressionRecordType.Call:
+      const func = _replayExpr(record.func, valueMap)
+      return func(...record.args.map(arg => _replayExpr(arg, valueMap)))
+  }
 }
 
 /**
@@ -269,139 +312,15 @@ export function recordExprAndKit<T = any>(expr: Expression<T>): [ExpressionRecor
 export function replayExpr(
   record: ExpressionRecord,
   valueMap: ReadonlyMap<any, any>,
-  cacheMap: WeakMap<any, any> = new WeakMap(),
 ): any {
-  if (!isExpressionRecord(record)) {
-    // 比如直接返回了数字或者字符串之类的
-    return record
-  }
-
-  if (cacheMap.has(record)) {
-    return cacheMap.get(record)
-  }
-
-  switch (record.type) {
-    case ExpAction.Get:
-    case ExpAction.Call: {
-      const { root } = record
-      let value: any
-      const rootRecord = getExprRecordFromKit(root)
-
-      if (rootRecord) {
-        // 说明 value 需要从 root 上拿取
-        value = replayExpr(rootRecord, valueMap, cacheMap)
-      } else {
-        // 说明父节点是根组件
-        if (!valueMap.has(root)) {
-          // TODO: console warning
-        }
-        value = valueMap.get(root)
-      }
-
-      // TODO: 检查是否拿了在原型链上的东西
-      let ret: any = record.names.reduce((v, name) => v[name], value)
-      if (record.type === ExpAction.Call) {
-        ret = ret(...record.args.map(expr => replayExpr(expr, valueMap, cacheMap)))
-      }
-      cacheMap.set(record, ret)
-      return ret
-    }
-    case ExpAction.Eq:
-    case ExpAction.Ne:
-    case ExpAction.Gt:
-    case ExpAction.Ge:
-    case ExpAction.Le:
-    case ExpAction.Lt:
-    case ExpAction.And:
-    case ExpAction.Or: {
-      const lv = replayExpr(record.lop, valueMap, cacheMap)
-      const rv = replayExpr(record.rop, valueMap, cacheMap)
-
-      const { type } = record
-
-      return type === ExpAction.Eq
-        ? lv === rv
-        : type === ExpAction.Ne
-        ? lv !== rv
-        : type === ExpAction.Gt
-        ? lv > rv
-        : type === ExpAction.Ge
-        ? lv >= rv
-        : type === ExpAction.Lt
-        ? lv < rv
-        : type === ExpAction.Le
-        ? lv <= rv
-        : type === ExpAction.And
-        ? !!(lv && rv)
-        : !!(lv || rv)
-    }
-    case ExpAction.Not: {
-      const v = replayExpr(record.op, valueMap, cacheMap)
-      return !v
-    }
-    default:
-      return null
-  }
+  const mixedMap = new WeakMap([...valueMap.entries()])
+  return _replayExpr(record, mixedMap)
 }
 
 export function evalExpr<T, R = any>(expr: Expression<T>, value: T): R {
-  const root = createKit()
+  const [record, root] = recordExprAndKit(expr)
   return replayExpr(
-    expr((root as unknown) as T),
+    record,
     new Map<any, any>([[root, value]]),
   )
-}
-
-function createBinaryOperator<V>(type: ExpBinaryAction) {
-  return <L = any, R = any>(lop: L, rop: R): V => {
-    const record = createRecord(type, {
-      root: null,
-      kit: null,
-      lop: getExprRecordFromKit(lop) || lop,
-      rop: getExprRecordFromKit(rop) || rop,
-    })
-
-    const kit = createKit(record)
-
-    record.kit = record.root = kit
-
-    return (kit as unknown) as V
-  }
-}
-
-function createUnaryOperator<V>(type: ExpUnaryAction) {
-  return <O = any>(op: O): V => {
-    const record = createRecord(type, {
-      root: null,
-      kit: null,
-      op: getExprRecordFromKit(op) || op,
-    })
-
-    const kit = createKit(record)
-
-    record.kit = record.root = kit
-
-    return (kit as unknown) as V
-  }
-}
-
-export const And = createBinaryOperator<boolean>(ExpAction.And)
-export const Or = createBinaryOperator<boolean>(ExpAction.Or)
-export const Eq = createBinaryOperator<boolean>(ExpAction.Eq)
-export const Ne = createBinaryOperator<boolean>(ExpAction.Ne)
-export const Gt = createBinaryOperator<boolean>(ExpAction.Gt)
-export const Lt = createBinaryOperator<boolean>(ExpAction.Lt)
-export const Ge = createBinaryOperator<boolean>(ExpAction.Ge)
-export const Le = createBinaryOperator<boolean>(ExpAction.Le)
-export const Not = createUnaryOperator<boolean>(ExpAction.Not)
-export const Logic = {
-  And : createBinaryOperator<boolean>(ExpAction.And),
-  Or : createBinaryOperator<boolean>(ExpAction.Or),
-  Eq : createBinaryOperator<boolean>(ExpAction.Eq),
-  Ne : createBinaryOperator<boolean>(ExpAction.Ne),
-  Gt : createBinaryOperator<boolean>(ExpAction.Gt),
-  Lt : createBinaryOperator<boolean>(ExpAction.Lt),
-  Ge : createBinaryOperator<boolean>(ExpAction.Ge),
-  Le : createBinaryOperator<boolean>(ExpAction.Le),
-  Not : createUnaryOperator<boolean>(ExpAction.Not)
 }

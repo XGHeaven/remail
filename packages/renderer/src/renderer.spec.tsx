@@ -27,6 +27,18 @@ describe('renderer/RemailRenderer', () => {
       }
     })
 
+    it('should render encoded string', () => {
+      expect(run(<span>1 > 2</span>)).toBe('<span>1 &gt; 2</span>')
+    })
+
+    it('should render string object as raw string', () => {
+      expect(run(<span>{new String('<i>v</i>')}</span>)).toBe('<span><i>v</i></span>')
+    })
+
+    it('should throw error when child is Object', () => {
+      expect(() => run(<span>{{}}</span>)).toThrowError('Objects are not valid as a React child. If you meant to render a collection of children, use an array instead.')
+    })
+
     it('should works for functional component', () => {
       const App = () => {
         return <div>app</div>

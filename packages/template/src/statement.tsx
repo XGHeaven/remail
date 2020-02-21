@@ -28,9 +28,15 @@ export const TemplateProvider = TemplateContext.Provider
 
 export const TemplateExpressionContext = createContext<{
   valueMap: ReadonlyMap<any, any>
+  loopLevel: number
 }>({
   valueMap: new Map(),
+  loopLevel: 0
 })
+
+function defaultLoopNameFormatter(level: number) {
+  return [`item${level}`, `index${level}`, `source${level}`]
+}
 
 export interface InterpolateProps<V> {
   expr?: Expression<V>
@@ -97,23 +103,28 @@ export interface ForEachProps<V = any, R = any> {
 }
 
 export function ForEach<V = any, R = any>(props: ForEachProps<V, R>) {
-  const { value } = useContext(TemplateContext)
-  const { valueMap } = useContext(TemplateExpressionContext)
+  const { value, formatter } = useContext(TemplateContext)
+  const { valueMap, loopLevel } = useContext(TemplateExpressionContext)
   const { source, render } = props
 
+  const [itemKey, indexKey, sourceKey] = useMemo(() => {
+    const loopName = formatter.loopValueName || defaultLoopNameFormatter
+    return loopName(loopLevel)
+  }, [loopLevel])
   const [sourceRecord, sourceKit] = useMemo(() => recordExprAndKit(source), [source])
-  const [renderChildren, renderKit, renderIndexKit, renderSourceKit] = useMemo(() => {
-    const renderKit = createKit()
-    const indexKit = createKit()
-    const renderSourceKit = createKit()
+  const [renderChildren, renderRoot, renderItem, renderIndex, renderSource] = useMemo(() => {
+    const rootKit = createKit()
+    const itemKit = rootKit[itemKey]
+    const indexKit = rootKit[indexKey]
+    const sourceKit = rootKit[sourceKey]
     const children = render(
-      (renderKit as unknown) as R,
+      (itemKit as unknown) as R,
       (indexKit as unknown) as number,
-      (renderSourceKit as unknown) as R[],
+      (sourceKit as unknown) as R[],
     )
 
-    return [children, renderKit, indexKit, renderSourceKit]
-  }, [render])
+    return [children, rootKit, itemKit, indexKit, sourceKit]
+  }, [render, loopLevel])
 
   if (!sourceRecord) {
     return null
@@ -129,10 +140,13 @@ export function ForEach<V = any, R = any>(props: ForEachProps<V, R>) {
             value={{
               valueMap: new Map([
                 ...currentValueMap,
-                [renderKit, item],
-                [renderIndexKit, index],
-                [renderSourceKit, items],
+                [renderRoot, {
+                  [itemKey]: item,
+                  [indexKey]: index,
+                  [sourceKey]: items
+                }]
               ]),
+              loopLevel: loopLevel + 1
             }}
           >
             {renderChildren}
@@ -142,6 +156,13 @@ export function ForEach<V = any, R = any>(props: ForEachProps<V, R>) {
     )
   } else {
     // TODO: it's a little hard
-    return null
+  return <Fragment>{formatter.loop(sourceRecord,
+    <TemplateExpressionContext.Provider value={{
+      valueMap,
+      loopLevel: loopLevel + 1
+    }}>
+      {renderChildren}
+    </TemplateExpressionContext.Provider>
+    , loopLevel)}</Fragment>
   }
 }

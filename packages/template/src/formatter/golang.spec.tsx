@@ -1,12 +1,16 @@
+import React from 'react'
 import { GolangTemplateFormatter } from './golang'
 import { Expression, recordExpr } from '../expression'
+import { renderToString } from '../../../renderer/src'
+import { TemplateProvider, ForEach, Interpolate } from '../statement'
+import { renderNode, LoopCase } from './case.helper'
 
 const golang = new GolangTemplateFormatter()
 
 describe('GolangTemplateFormatter#interpolate', () => {
   function formatTest(expr: Expression<any>, expected: string) {
-    const result = golang.interpolate(recordExpr(expr)!)
-    expect(result).toBe(expected)
+    const result = golang.interpolate(recordExpr(expr))
+    expect(result.toString()).toStrictEqual(expected)
   }
 
   it('should render property access correctly', () => {
@@ -14,20 +18,10 @@ describe('GolangTemplateFormatter#interpolate', () => {
   })
 
   it('should render func call correctly', () => {
-    formatTest(v => v.Cap(v.Title), '{{.Cap .Title}}')
-  })
-
-  it('should render pipeline when have two more function call', () => {
-    formatTest(v => v.Cap(v.Title, v.Upper(v.Name)), '{{.Upper .Name | .Cap .Title}}')
-    formatTest(v => v.Total(v.Upper(v.Name)), '{{.Upper .Name | .Total}}')
-  })
-
-  it('should throw error when invalid expression', () => {
-    function shouldInvalid(expr: Expression<any>) {
-      expect(() => formatTest(expr, '')).toThrow()
-    }
-
-    shouldInvalid(v => v.a(v.b(), v.c()))
+    formatTest(v => v.Cap(), '{{call .Cap}}')
+    formatTest(v => v.Cap(v.Title), '{{call .Cap .Title}}')
+    formatTest(v => v.Cap(v.Title, v.Upper(v.Name)), '{{call .Cap .Title (call .Upper .Name)}}')
+    formatTest(v => v.Total(v.Upper(v.Name)), '{{call .Total (call .Upper .Name)}}')
   })
 })
 
@@ -52,9 +46,22 @@ describe('GolangTemplateFormatter#loop', () => {
   const Loop = 'loop'
   it('should render correct', () => {
     expect(
-      golang.loop(recordExpr(v => v.Names)!, (value, index) => {
-        return Loop
-      }),
+      golang.loop(
+        recordExpr(v => v.Names),
+        Loop,
+      ),
     ).toEqual(['{{range $index0, $value0 := .Names}}', Loop, '{{end}}'])
+  })
+
+  it('should correct for render child value', () => {
+    expect(renderNode(golang, LoopCase.basic)).toMatchInlineSnapshot(
+      `"<div>{{range $index0, $value0 := .names}}<span>{{call .foo $value0}}{{$index0}}</span>{{end}}</div>"`,
+    )
+  })
+
+  it('should support nested loop', () => {
+    expect(renderNode(golang, LoopCase.nested)).toMatchInlineSnapshot(
+      `"<div>{{range $index0, $value0 := .names}}{{range $index1, $value1 := $value0}}{{$value1}}{{end}}{{end}}</div>"`,
+    )
   })
 })

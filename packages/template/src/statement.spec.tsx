@@ -1,6 +1,7 @@
 import React, { ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { Expression, Logic } from './expression'
+import { Expression } from './expression'
+import { Operator as Logic} from './operator'
 import { TemplateProvider, Interpolate, TemplateExpressionContext, ForEach, If } from './statement'
 import { createKit } from '../lib'
 
@@ -57,6 +58,7 @@ describe('Interpolate', () => {
                 [v1, { type: 'v1' }],
                 [v2, { type: 'v2' }],
               ]),
+              loopLevel: 0
             }}
           >
             <Interpolate expr={v => v.type} />
@@ -116,7 +118,7 @@ describe('If', () => {
   })
 })
 
-describe.only('ForEach', () => {
+describe('ForEach', () => {
   function testForEach(
     dataSource: any[],
     render: (v: any, i: any, vs: any[]) => ReactNode,
@@ -147,7 +149,7 @@ describe.only('ForEach', () => {
     )
   })
 
-  it.skip('should render primary value dataSource', () => {
+  it('should render primary value dataSource', () => {
     testForEach(
       [1, 2, 3],
       v => (

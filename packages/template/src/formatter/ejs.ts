@@ -1,36 +1,41 @@
 import { TemplateFormatter } from '../interface'
-import { ExpressionRecord, ExpAction, isExpressionRecord } from '../expression'
+import { ExpressionRecord, ExpressionRecordType, ExpressionKit } from '../expression'
 import { ReactNode } from 'react'
 
-// TODO
 export class EjsTemplateFormatter implements TemplateFormatter {
   private expr(record: ExpressionRecord): string {
-    if (record.type === ExpAction.Get) {
-      return record.names.join('.')
-    } else if (record.type === ExpAction.Call) {
-      return `${record.names.join('.')}(${record.args
-        .map(rec => {
-          if (isExpressionRecord(rec)) {
-            return this.expr(rec)
-          }
-          return rec
-        })
-        .join(', ')})`
-    } else {
-      // TODO
-      return ''
+    switch(record.type) {
+      case ExpressionRecordType.Get:
+        return record.names.join('.')
+      case ExpressionRecordType.Call:
+        // TODO: support logic
+        return `${this.expr(record.func)}(${record.args.map(rec => this.expr(rec)).join(', ')})`
+      case ExpressionRecordType.Root:
+        return ''
+      case ExpressionRecordType.Value:
+        return JSON.stringify(record.value)
     }
   }
 
-  interpolate(record: ExpressionRecord): string {
-    return `<%= ${this.expr(record)} %>`
+  interpolate(record: ExpressionRecord): String {
+    return new String(`<%= ${this.expr(record)} %>`)
   }
 
   condition(record: ExpressionRecord, $then: ReactNode, $else?: ReactNode): ReactNode[] {
-    return []
+    const exprString = this.expr(record)
+    return [new String(`<% if (${exprString}) { %>`), $then, new String(`<% } ${$else ? 'else { ' : ''}%>`), ...($else ? [$else, new String('<% } %>')] : [])]
   }
 
-  loop() {
-    return []
+  loop(
+    source: ExpressionRecord,
+    body: ReactNode,
+    level: number = 0,
+  ) {
+    const [itemKey, indexKey, sourceKey] = this.loopValueName(level)
+    return [new String(`<% ${this.expr(source)}.forEach(function(${itemKey}, ${indexKey}, ${sourceKey}) { %>`), body, new String(`<% }) %>`)]
+  }
+
+  loopValueName(level: number): [string, string, string] {
+    return [`item${level}`, `index${level}`, `source${level}`]
   }
 }
