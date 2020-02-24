@@ -16,7 +16,7 @@ function useMemo(factory: () => any, deps: any[]) {
 
 function useRef(initial: any) {
   return {
-    current: initial
+    current: initial,
   }
 }
 

@@ -8,11 +8,7 @@ import { Operator } from './operator'
 export abstract class TemplateFormatter {
   abstract interpolate(record: ExpressionRecord): String | string
   abstract condition(record: ExpressionRecord, $then: ReactNode, $else?: ReactNode): ReactNode[]
-  abstract loop(
-    record: ExpressionRecord,
-    body: ReactNode,
-    level?: number,
-  ): ReactNode[]
+  abstract loop(record: ExpressionRecord, body: ReactNode, level?: number): ReactNode[]
   // 用于指定循环的变量名称
   abstract loopValueName?(level: number): [string, string, string]
 
@@ -20,7 +16,10 @@ export abstract class TemplateFormatter {
     const funcRecord = record.func
 
     if (funcRecord.type === ExpressionRecordType.Get) {
-      if (funcRecord.root.type === ExpressionRecordType.Root && funcRecord.root.kit === Operator as unknown as  ExpressionKit) {
+      if (
+        funcRecord.root.type === ExpressionRecordType.Root &&
+        funcRecord.root.kit === ((Operator as unknown) as ExpressionKit)
+      ) {
         return true
       }
     }

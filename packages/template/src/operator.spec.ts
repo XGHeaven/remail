@@ -1,5 +1,5 @@
-import { Operator } from "./operator"
-import { Expression, recordExprAndKit, replayExpr } from "./expression"
+import { Operator } from './operator'
+import { Expression, recordExprAndKit, replayExpr } from './expression'
 
 describe('Operator', () => {
   function recordAndEval(expr: Expression<any>, value: any) {

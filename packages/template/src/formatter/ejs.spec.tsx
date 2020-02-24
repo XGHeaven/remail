@@ -21,7 +21,13 @@ describe('EjsTemplateFormatter#interpolate', () => {
   it('should correct for function call', () => {
     formatTest(v => v.a.b(), 'a.b()')
     formatTest(v => v.a().b, 'a().b')
-    formatTest(v => v.a()().b(), 'a()().b()')
+    formatTest(
+      v =>
+        v
+          .a()()
+          .b(),
+      'a()().b()',
+    )
   })
 
   it('should render function call with args', () => {
@@ -41,7 +47,7 @@ describe('EjsTemplateFormatter#interpolate', () => {
   })
 
   it.each<[string, Expression<any>, string]>([
-    ['And', (v) => Operator.And(v.a, v.b, v.c), '(a) && (b) && (c)'],
+    ['And', v => Operator.And(v.a, v.b, v.c), '(a) && (b) && (c)'],
     ['Or', v => Operator.Or(v.a, v.b, v.c), '(a) || (b) || (c)'],
     ['Not', v => Operator.Not(v.a), '!(a)'],
     ['Add', v => Operator.Add(v.a, v.b, v.c), '(a) + (b) + (c)'],
@@ -54,7 +60,7 @@ describe('EjsTemplateFormatter#interpolate', () => {
     ['Substr with primary number', v => Operator.Substr(v.a, 1), '(a).substr(1)'],
     ['Get', v => Operator.Get(v.a, v.b), '(a)[b]'],
     ['Get with number index', v => Operator.Get(v.a, 2), '(a)[2]'],
-    ['Get with string index', v => Operator.Get(v.a, 'key'), '(a)["key"]']
+    ['Get with string index', v => Operator.Get(v.a, 'key'), '(a)["key"]'],
   ])('should render correct operator for %s', (_, expr, expected) => {
     formatTest(expr, expected)
   })
@@ -122,17 +128,13 @@ describe('EjsTemplateFormatter#loop', () => {
   })
 
   it('should correct render child value', () => {
-    expect(
-      renderNode(ejs, LoopCase.basic)
-    ).toMatchInlineSnapshot(
+    expect(renderNode(ejs, LoopCase.basic)).toMatchInlineSnapshot(
       `"<div><% names.forEach(function(item0, index0, source0) { %><span><%= foo(item0) %><%= index0 %></span><% }) %></div>"`,
     )
   })
 
   it('should correct render nest loop', () => {
-    expect(
-      renderNode(ejs, LoopCase.nested)
-    ).toMatchInlineSnapshot(
+    expect(renderNode(ejs, LoopCase.nested)).toMatchInlineSnapshot(
       `"<div><% names.forEach(function(item0, index0, source0) { %><% item0.forEach(function(item1, index1, source1) { %><%= item1 %><% }) %><% }) %></div>"`,
     )
   })

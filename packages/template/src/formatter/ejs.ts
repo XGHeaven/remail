@@ -5,7 +5,7 @@ import { Operator } from '../operator'
 
 export class EjsTemplateFormatter extends TemplateFormatter {
   private expr(record: ExpressionRecord): string {
-    switch(record.type) {
+    switch (record.type) {
       case ExpressionRecordType.Get:
         const name = record.names.join('.')
         if (record.root.type === ExpressionRecordType.Root) {
@@ -18,7 +18,7 @@ export class EjsTemplateFormatter extends TemplateFormatter {
         if (this.isOperatorCall(record)) {
           const parArgs = args.map(arg => `(${arg})`)
           // TODO: support different priority
-          switch(funcName as keyof typeof Operator) {
+          switch (funcName as keyof typeof Operator) {
             case 'And':
               return parArgs.join(' && ')
             case 'Or':
@@ -66,16 +66,21 @@ export class EjsTemplateFormatter extends TemplateFormatter {
 
   condition(record: ExpressionRecord, $then: ReactNode, $else?: ReactNode): ReactNode[] {
     const exprString = this.expr(record)
-    return [new String(`<% if (${exprString}) { %>`), $then, new String(`<% } ${$else ? 'else { ' : ''}%>`), ...($else ? [$else, new String('<% } %>')] : [])]
+    return [
+      new String(`<% if (${exprString}) { %>`),
+      $then,
+      new String(`<% } ${$else ? 'else { ' : ''}%>`),
+      ...($else ? [$else, new String('<% } %>')] : []),
+    ]
   }
 
-  loop(
-    source: ExpressionRecord,
-    body: ReactNode,
-    level: number = 0,
-  ) {
+  loop(source: ExpressionRecord, body: ReactNode, level: number = 0) {
     const [itemKey, indexKey, sourceKey] = this.loopValueName(level)
-    return [new String(`<% ${this.expr(source)}.forEach(function(${itemKey}, ${indexKey}, ${sourceKey}) { %>`), body, new String(`<% }) %>`)]
+    return [
+      new String(`<% ${this.expr(source)}.forEach(function(${itemKey}, ${indexKey}, ${sourceKey}) { %>`),
+      body,
+      new String(`<% }) %>`),
+    ]
   }
 
   loopValueName(level: number): [string, string, string] {

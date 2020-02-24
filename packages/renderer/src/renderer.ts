@@ -428,7 +428,9 @@ export class RemailRenderer {
       // raw string
       return yield node.toString()
     } else if (typeof node === 'object') {
-      throw new Error('Objects are not valid as a React child. If you meant to render a collection of children, use an array instead.')
+      throw new Error(
+        'Objects are not valid as a React child. If you meant to render a collection of children, use an array instead.',
+      )
     }
   }
 }

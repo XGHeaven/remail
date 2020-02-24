@@ -15,7 +15,10 @@ function assertNotNull<T>(val: T): asserts val is NonNullable<T> {
   expect(val).not.toBeNull()
 }
 
-function assertRecordType<T extends ExpressionRecordType>(record: any, type: T): asserts record is ExpressionRecords[T] {
+function assertRecordType<T extends ExpressionRecordType>(
+  record: any,
+  type: T,
+): asserts record is ExpressionRecords[T] {
   expect(record.type).toBe(type)
 }
 

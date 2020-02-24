@@ -1,7 +1,7 @@
 import React, { ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { Expression } from './expression'
-import { Operator as Logic} from './operator'
+import { Operator as Logic } from './operator'
 import { TemplateProvider, Interpolate, TemplateExpressionContext, ForEach, If } from './statement'
 import { createKit } from '../src'
 
@@ -48,7 +48,7 @@ describe('Interpolate', () => {
                 [v1, { type: 'v1' }],
                 [v2, { type: 'v2' }],
               ]),
-              loopLevel: 0
+              loopLevel: 0,
             }}
           >
             <Interpolate expr={v => v.type} />
@@ -65,46 +65,39 @@ describe('Interpolate', () => {
 
 describe('If', () => {
   it('should render then node', () => {
-    expect(renderToStaticMarkup(
-      <TemplateProvider value={{ formatter: {} as any, value: {count: 10}}}>
-        <If
-          condition={v => Logic.Gt(v.count, 9)}
-          then={<Interpolate expr={v =>v.count}/>}
-        />
-      </TemplateProvider>
-    )).toBe('10')
+    expect(
+      renderToStaticMarkup(
+        <TemplateProvider value={{ formatter: {} as any, value: { count: 10 } }}>
+          <If condition={v => Logic.Gt(v.count, 9)} then={<Interpolate expr={v => v.count} />} />
+        </TemplateProvider>,
+      ),
+    ).toBe('10')
   })
 
   it('should render false node', () => {
-    expect(renderToStaticMarkup(
-      <TemplateProvider value={{formatter: {} as any, value: {count: 10}}}>
-        <If
-          condition={v => Logic.Le(v.count, 9)}
-          then={null}
-          else={<Interpolate expr={v => v.count}/>}
-        />
-      </TemplateProvider>
-    )).toBe('10')
+    expect(
+      renderToStaticMarkup(
+        <TemplateProvider value={{ formatter: {} as any, value: { count: 10 } }}>
+          <If condition={v => Logic.Le(v.count, 9)} then={null} else={<Interpolate expr={v => v.count} />} />
+        </TemplateProvider>,
+      ),
+    ).toBe('10')
   })
 
   it('should accept function', () => {
-    const node = <If
-      condition={v => Logic.Eq(v.count, 10)}
-      then={() => 'then'}
-      else={() => 'else'}
-    />
+    const node = <If condition={v => Logic.Eq(v.count, 10)} then={() => 'then'} else={() => 'else'} />
 
-    expect(renderToStaticMarkup(
-      <TemplateProvider value={{formatter: {} as any, value: {count: 10}}}>
-        {node}
-      </TemplateProvider>
-    )).toBe('then')
+    expect(
+      renderToStaticMarkup(
+        <TemplateProvider value={{ formatter: {} as any, value: { count: 10 } }}>{node}</TemplateProvider>,
+      ),
+    ).toBe('then')
 
-    expect(renderToStaticMarkup(
-      <TemplateProvider value={{formatter: {} as any, value: {count: 1}}}>
-        {node}
-      </TemplateProvider>
-    )).toBe('else')
+    expect(
+      renderToStaticMarkup(
+        <TemplateProvider value={{ formatter: {} as any, value: { count: 1 } }}>{node}</TemplateProvider>,
+      ),
+    ).toBe('else')
   })
 })
 

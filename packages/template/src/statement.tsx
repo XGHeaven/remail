@@ -19,7 +19,7 @@ export const TemplateContext = createContext<{
     interpolate: createNoop('interpolate'),
     condition: createNoop('condition'),
     loop: createNoop('loop'),
-    isOperatorCall: createNoop('isOperatorCall')
+    isOperatorCall: createNoop('isOperatorCall'),
   },
   value: null,
 })
@@ -31,7 +31,7 @@ export const TemplateExpressionContext = createContext<{
   loopLevel: number
 }>({
   valueMap: new Map(),
-  loopLevel: 0
+  loopLevel: 0,
 })
 
 function defaultLoopNameFormatter(level: number) {
@@ -117,11 +117,7 @@ export function ForEach<V = any, R = any>(props: ForEachProps<V, R>) {
     const itemKit = rootKit[itemKey]
     const indexKit = rootKit[indexKey]
     const sourceKit = rootKit[sourceKey]
-    const children = render(
-      (itemKit as unknown) as R,
-      (indexKit as unknown) as number,
-      (sourceKit as unknown) as R[],
-    )
+    const children = render((itemKit as unknown) as R, (indexKit as unknown) as number, (sourceKit as unknown) as R[])
 
     return [children, rootKit, itemKit, indexKit, sourceKit]
   }, [render, loopLevel])
@@ -140,13 +136,16 @@ export function ForEach<V = any, R = any>(props: ForEachProps<V, R>) {
             value={{
               valueMap: new Map([
                 ...currentValueMap,
-                [renderRoot, {
-                  [itemKey]: item,
-                  [indexKey]: index,
-                  [sourceKey]: items
-                }]
+                [
+                  renderRoot,
+                  {
+                    [itemKey]: item,
+                    [indexKey]: index,
+                    [sourceKey]: items,
+                  },
+                ],
               ]),
-              loopLevel: loopLevel + 1
+              loopLevel: loopLevel + 1,
             }}
           >
             {renderChildren}
@@ -156,13 +155,21 @@ export function ForEach<V = any, R = any>(props: ForEachProps<V, R>) {
     )
   } else {
     // TODO: it's a little hard
-  return <Fragment>{formatter.loop(sourceRecord,
-    <TemplateExpressionContext.Provider value={{
-      valueMap,
-      loopLevel: loopLevel + 1
-    }}>
-      {renderChildren}
-    </TemplateExpressionContext.Provider>
-    , loopLevel)}</Fragment>
+    return (
+      <Fragment>
+        {formatter.loop(
+          sourceRecord,
+          <TemplateExpressionContext.Provider
+            value={{
+              valueMap,
+              loopLevel: loopLevel + 1,
+            }}
+          >
+            {renderChildren}
+          </TemplateExpressionContext.Provider>,
+          loopLevel,
+        )}
+      </Fragment>
+    )
   }
 }

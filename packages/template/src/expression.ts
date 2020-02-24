@@ -37,7 +37,7 @@ export interface ExpressionBridgeOfGet extends ExpressionBridgeBase {
 }
 
 export interface ExpressionBridgeOfCall extends ExpressionBridgeBase {
-  action: ExpressionBridgeAction.Call,
+  action: ExpressionBridgeAction.Call
   args: any[]
 }
 
@@ -67,7 +67,7 @@ export enum ExpressionRecordType {
   Get,
   Call,
   Value,
-  Root
+  Root,
 }
 
 export interface ExpressionNormalRecord {
@@ -88,7 +88,7 @@ export interface ExpressionRecordGetType extends ExpressionNormalRecord {
 }
 
 export interface ExpressionRecordValueType extends ExpressionNormalRecord {
-  type: ExpressionRecordType.Value,
+  type: ExpressionRecordType.Value
   value: any
 }
 
@@ -109,7 +109,7 @@ export type ExpressionKit = {
 export type ExpressionRecords = {
   [ExpressionRecordType.Get]: ExpressionRecordGetType
   [ExpressionRecordType.Call]: ExpressionRecordCallType
-  [ExpressionRecordType.Value]: ExpressionRecordValueType,
+  [ExpressionRecordType.Value]: ExpressionRecordValueType
   [ExpressionRecordType.Root]: ExpressionRecordRootType
 }
 
@@ -127,9 +127,9 @@ export function createRecord<T extends ExpressionRecordType>(
 }
 
 const defaultHandlers: ProxyHandler<ExpressionKitScapegoat> = {
-  get({data}, name) {
+  get({ data }, name) {
     if (typeof name === 'symbol') {
-      switch(name) {
+      switch (name) {
         case ExpressionKitBridgeSymbol:
           return data.bridge
         case ExpressionKitSymbol:
@@ -171,7 +171,7 @@ const defaultHandlers: ProxyHandler<ExpressionKitScapegoat> = {
 
     return nextKit
   },
-  apply({data}, __, args) {
+  apply({ data }, __, args) {
     const bridge: ExpressionBridgeOfCall = {
       action: ExpressionBridgeAction.Call,
       args,
@@ -183,8 +183,8 @@ const defaultHandlers: ProxyHandler<ExpressionKitScapegoat> = {
     bridge.dest = nextKit
     return nextKit
   },
-  set({data}, name, value) {
-    switch(name) {
+  set({ data }, name, value) {
+    switch (name) {
       case ExpressionKitAccompanySymbol:
         return Reflect.set(data, 'accompany', value)
       case ExpressionKitDataSymbol:
@@ -196,7 +196,7 @@ const defaultHandlers: ProxyHandler<ExpressionKitScapegoat> = {
     if (typeof key !== 'symbol') {
       return true
     } else {
-      switch(key) {
+      switch (key) {
         case ExpressionKitSymbol:
           return true
         default:
@@ -210,10 +210,10 @@ const defaultHandlers: ProxyHandler<ExpressionKitScapegoat> = {
   construct() {
     throw new Error('Cannot use kit as constructor')
   },
-  defineProperty(){
+  defineProperty() {
     return false
   },
-  deleteProperty(){
+  deleteProperty() {
     return false
   },
   enumerate() {
@@ -233,7 +233,7 @@ const defaultHandlers: ProxyHandler<ExpressionKitScapegoat> = {
   },
   setPrototypeOf() {
     throw new Error('Cannot set prototype of kit')
-  }
+  },
 }
 
 export function createKit(selfBridge: ExpressionBridge | null = null): ExpressionKit {
@@ -243,14 +243,14 @@ export function createKit(selfBridge: ExpressionBridge | null = null): Expressio
     bridges: new Map<string | number, ExpressionBridge>(),
     accompany: null,
     // placeholder
-    kit: null as any
+    kit: null as any,
   }
 
   const scapegoat: ExpressionKitScapegoat = Object.assign(function scapegoat() {}, {
-    data
+    data,
   })
 
-  const kit = new Proxy<ExpressionKitScapegoat>(scapegoat, defaultHandlers) as unknown as ExpressionKit
+  const kit = (new Proxy<ExpressionKitScapegoat>(scapegoat, defaultHandlers) as unknown) as ExpressionKit
 
   data.kit = kit
 
@@ -268,9 +268,12 @@ export function getExpressionKitBridge(kit: ExpressionKit): ExpressionBridge | n
   return data && data.bridge
 }
 
-export function generateRecord(kit: ExpressionKit, records: WeakMap<any, ExpressionRecord> = new WeakMap()): ExpressionRecord {
+export function generateRecord(
+  kit: ExpressionKit,
+  records: WeakMap<any, ExpressionRecord> = new WeakMap(),
+): ExpressionRecord {
   if (!isExprKit(kit)) {
-    return createRecord(ExpressionRecordType.Value, {value: kit})
+    return createRecord(ExpressionRecordType.Value, { value: kit })
   }
 
   const { bridge } = getExpressionKitData(kit)
@@ -280,7 +283,7 @@ export function generateRecord(kit: ExpressionKit, records: WeakMap<any, Express
     if (records.has(kit)) {
       return records.get(kit)!
     }
-    const record =  createRecord(ExpressionRecordType.Root, {kit})
+    const record = createRecord(ExpressionRecordType.Root, { kit })
     records.set(kit, record)
     return record
   } else {
@@ -290,7 +293,7 @@ export function generateRecord(kit: ExpressionKit, records: WeakMap<any, Express
     if (bridge.action === ExpressionBridgeAction.Get) {
       const names = [bridge.name]
       let root = bridge.from
-      while(true) {
+      while (true) {
         const edge = getExpressionKitBridge(root)
 
         if (!edge) {
@@ -307,14 +310,14 @@ export function generateRecord(kit: ExpressionKit, records: WeakMap<any, Express
       }
       const record = createRecord(ExpressionRecordType.Get, {
         root: generateRecord(root, records),
-        names
+        names,
       })
       records.set(bridge, record)
       return record
     } else {
       const record = createRecord(ExpressionRecordType.Call, {
         func: generateRecord(bridge.from, records),
-        args: bridge.args.map(arg => generateRecord(arg))
+        args: bridge.args.map(arg => generateRecord(arg)),
       })
       records.set(bridge, record)
       return record
@@ -351,7 +354,7 @@ export function _replayExpr(record: ExpressionRecord, valueMap: WeakMap<any, any
     return valueMap.get(record)
   }
 
-  switch(record.type) {
+  switch (record.type) {
     case ExpressionRecordType.Root: {
       const { kit } = record
       // 这里不再使用 record 作为缓存 key，而是用 kit
@@ -372,10 +375,7 @@ export function _replayExpr(record: ExpressionRecord, valueMap: WeakMap<any, any
 /**
  * Replay a expression to get value with the record.
  */
-export function replayExpr(
-  record: ExpressionRecord,
-  valueMap: ReadonlyMap<any, any>,
-): any {
+export function replayExpr(record: ExpressionRecord, valueMap: ReadonlyMap<any, any>): any {
   const mixedMap = new WeakMap([...valueMap.entries()])
   return _replayExpr(record, mixedMap)
 }

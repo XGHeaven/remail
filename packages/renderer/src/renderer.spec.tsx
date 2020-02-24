@@ -1,4 +1,15 @@
-import React, { FC, createContext, useContext, Fragment, StrictMode, ReactElement, Component, useState, useMemo, useRef } from 'react'
+import React, {
+  FC,
+  createContext,
+  useContext,
+  Fragment,
+  StrictMode,
+  ReactElement,
+  Component,
+  useState,
+  useMemo,
+  useRef,
+} from 'react'
 import { RemailRenderer, RemailRendererOptions, RendererPluginHooks } from './renderer'
 
 function run(element: ReactElement<any>, options: Partial<RemailRendererOptions> = {}) {
@@ -36,7 +47,9 @@ describe('renderer/RemailRenderer', () => {
     })
 
     it('should throw error when child is Object', () => {
-      expect(() => run(<span>{{}}</span>)).toThrowError('Objects are not valid as a React child. If you meant to render a collection of children, use an array instead.')
+      expect(() => run(<span>{{}}</span>)).toThrowError(
+        'Objects are not valid as a React child. If you meant to render a collection of children, use an array instead.',
+      )
     })
 
     it('should works for functional component', () => {
@@ -53,16 +66,11 @@ describe('renderer/RemailRenderer', () => {
           const [val] = useState('val')
           return <i>{val}</i>
         },
-        '<i>val</i>'
-      ], [
-        'useState with factory parameter',
-        () => <i>{useState(() => 'val')[0]}</i>,
-        '<i>val</i>'
-      ], [
-        'useMemo',
-        () => <i>{useMemo(() => 'memo', [])}</i>,
-        '<i>memo</i>'
-      ], [
+        '<i>val</i>',
+      ],
+      ['useState with factory parameter', () => <i>{useState(() => 'val')[0]}</i>, '<i>val</i>'],
+      ['useMemo', () => <i>{useMemo(() => 'memo', [])}</i>, '<i>memo</i>'],
+      [
         'useRef without initial value',
         () => {
           const ref = useRef<any>()
@@ -70,14 +78,11 @@ describe('renderer/RemailRenderer', () => {
           ref.current = 'lazy'
           return <i>{ref.current}</i>
         },
-        '<i>lazy</i>'
-      ], [
-        'use with initial value',
-      () => <i>{useRef('init').current}</i>,
-      '<i>init</i>'
-      ]
+        '<i>lazy</i>',
+      ],
+      ['use with initial value', () => <i>{useRef('init').current}</i>, '<i>init</i>'],
     ])('should support function component using %s', (name, App, expected) => {
-      expect(run(<App/>)).toBe(expected)
+      expect(run(<App />)).toBe(expected)
     })
 
     it('should works for class component', () => {

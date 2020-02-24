@@ -62,15 +62,16 @@ export class GolangTemplateFormatter extends TemplateFormatter {
 
   condition(record: ExpressionRecord, $then: ReactNode, $else?: ReactNode): ReactNode[] {
     const exprString = this.expr(record)
-    return [new String(`{{if ${exprString}}}`), $then, ...($else ? [new String(`{{else}}`), $else] : []), new String(`{{end}}`)]
+    return [
+      new String(`{{if ${exprString}}}`),
+      $then,
+      ...($else ? [new String(`{{else}}`), $else] : []),
+      new String(`{{end}}`),
+    ]
   }
 
-  loop(
-    source: ExpressionRecord,
-    body: ReactNode,
-    level: number = 0,
-  ): ReactNode[] {
-    const [ valueKey, indexKey, sourceKey ] = this.loopValueName(level)
+  loop(source: ExpressionRecord, body: ReactNode, level: number = 0): ReactNode[] {
+    const [valueKey, indexKey, sourceKey] = this.loopValueName(level)
     return [new String(`{{range ${indexKey}, ${valueKey} := ${this.expr(source)}}}`), body, new String(`{{end}}`)]
   }
 
