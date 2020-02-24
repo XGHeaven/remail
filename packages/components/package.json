@@ -1,6 +1,6 @@
 {
   "name": "@remail/components",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "> TODO: description",
   "keywords": [
     "react",
@@ -34,7 +34,7 @@
     "build": "rimraf ./lib && tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@remail/renderer": "^0.0.2"
+    "@remail/renderer": "^0.1.0"
   },
   "peerDependencies": {
     "react": "16"
