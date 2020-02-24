@@ -1,9 +1,9 @@
 import {
   recordExpr,
   replayExpr,
-  ExpressionRecordCallAction,
+  ExpressionRecordCallType,
   ExpressionRecord,
-  ExpressionRecordGetAction,
+  ExpressionRecordGetType,
   createKit,
   ExpressionRecords,
   ExpressionRecordType,
@@ -19,11 +19,11 @@ function assertRecordType<T extends ExpressionRecordType>(record: any, type: T):
   expect(record.type).toBe(type)
 }
 
-function expectIsCallAction(record: ExpressionRecord): asserts record is ExpressionRecordCallAction {
+function expectIsCallAction(record: ExpressionRecord): asserts record is ExpressionRecordCallType {
   expect(record.type).toBe(ExpressionRecordType.Call)
 }
 
-function expectIsGetAction(record: ExpressionRecord): asserts record is ExpressionRecordGetAction {
+function expectIsGetAction(record: ExpressionRecord): asserts record is ExpressionRecordGetType {
   expect(record.type).toBe(ExpressionRecordType.Get)
 }
 

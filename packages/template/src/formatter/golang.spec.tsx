@@ -1,8 +1,5 @@
-import React from 'react'
 import { GolangTemplateFormatter } from './golang'
 import { Expression, recordExpr } from '../expression'
-import { renderToString } from '../../../renderer/src'
-import { TemplateProvider, ForEach, Interpolate } from '../statement'
 import { renderNode, LoopCase } from './case.helper'
 
 const golang = new GolangTemplateFormatter()
@@ -10,8 +7,13 @@ const golang = new GolangTemplateFormatter()
 describe('GolangTemplateFormatter#interpolate', () => {
   function formatTest(expr: Expression<any>, expected: string) {
     const result = golang.interpolate(recordExpr(expr))
-    expect(result.toString()).toStrictEqual(expected)
+    expect(result).toBeInstanceOf(String)
+    expect(result.toString()).toBe(expected)
   }
+
+  it('should render root as "."', () => {
+    formatTest(v => v, '{{.}}')
+  })
 
   it('should render property access correctly', () => {
     formatTest(v => v.a.b, '{{.a.b}}')
@@ -22,6 +24,7 @@ describe('GolangTemplateFormatter#interpolate', () => {
     formatTest(v => v.Cap(v.Title), '{{call .Cap .Title}}')
     formatTest(v => v.Cap(v.Title, v.Upper(v.Name)), '{{call .Cap .Title (call .Upper .Name)}}')
     formatTest(v => v.Total(v.Upper(v.Name)), '{{call .Total (call .Upper .Name)}}')
+    formatTest(v => v.A().B, '{{(call .A).B}}')
   })
 })
 

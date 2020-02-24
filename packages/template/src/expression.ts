@@ -20,33 +20,45 @@
 export type Expression<T = any, R = any> = (params: T) => R
 
 // export const ExpressionRecordSymbol = Symbol.for('remail.expression.record')
-export const IsExpressionRecord = Symbol.for('remail.expression.is-record')
+export const ExpressionRecordSymbol = Symbol.for('remail.expression.is-record')
 export const ExpressionKitSymbol = Symbol.for('remail.expression-kit')
 export const ExpressionKitAccompanySymbol = Symbol.for('remail.expression.accompany-value')
-export const ExpressionKitPaths = Symbol.for('remail.expression-kit.paths')
-export const ExpressionKitParent = Symbol.for('remail.expression-kit.parent')
-export const ExpressionKitRoot = Symbol.for('remail.expression-kit.root')
-export const ExpressionKitRelation = Symbol.for('remail.expression-kit.relation')
 export const ExpressionKitBridgeSymbol = Symbol.for('remail.expression-kit.bridge')
+export const ExpressionKitDataSymbol = Symbol.for('remail.expression-kit.data')
 
-export interface ExpressionKitBridgeBase {
+export interface ExpressionBridgeBase {
   from: ExpressionKit
   dest: ExpressionKit
 }
 
-export interface ExpressionKitBridgeOfGet extends ExpressionKitBridgeBase {
-  action: ExpAction.Get
+export interface ExpressionBridgeOfGet extends ExpressionBridgeBase {
+  action: ExpressionBridgeAction.Get
   name: string | number
 }
 
-export interface ExpressionKitBridgeOfCall extends ExpressionKitBridgeBase {
-  action: ExpAction.Call,
+export interface ExpressionBridgeOfCall extends ExpressionBridgeBase {
+  action: ExpressionBridgeAction.Call,
   args: any[]
 }
 
-export type ExpressionKitBridge = ExpressionKitBridgeOfGet | ExpressionKitBridgeOfCall
+export interface ExpressionKitData {
+  // 父级边数据
+  bridge: ExpressionBridge | null
+  // 子元素边
+  bridges: Map<string | number, ExpressionBridge>
+  // 伴随值
+  accompany: any
+  // 本身的 Kit
+  kit: ExpressionKit
+}
 
-export enum ExpAction {
+export type ExpressionKitScapegoat = (() => void) & {
+  data: ExpressionKitData
+}
+
+export type ExpressionBridge = ExpressionBridgeOfGet | ExpressionBridgeOfCall
+
+export enum ExpressionBridgeAction {
   Get,
   Call,
 }
@@ -63,24 +75,24 @@ export interface ExpressionNormalRecord {
 }
 
 // 虽然 Call 是联合节点，但是为了方便实现这里将其用作链接节点
-export interface ExpressionRecordCallAction extends ExpressionNormalRecord {
+export interface ExpressionRecordCallType extends ExpressionNormalRecord {
   type: ExpressionRecordType.Call
   func: ExpressionRecord
   args: (ExpressionRecord | any)[] // 支持常量值
 }
 
-export interface ExpressionRecordGetAction extends ExpressionNormalRecord {
+export interface ExpressionRecordGetType extends ExpressionNormalRecord {
   root: ExpressionRecord
   type: ExpressionRecordType.Get
   names: Array<string | number>
 }
 
-export interface ExpressionRecordValueAction extends ExpressionNormalRecord {
+export interface ExpressionRecordValueType extends ExpressionNormalRecord {
   type: ExpressionRecordType.Value,
   value: any
 }
 
-export interface ExpressionRecordRootAction extends ExpressionNormalRecord {
+export interface ExpressionRecordRootType extends ExpressionNormalRecord {
   type: ExpressionRecordType.Root
   // 使用这个作为唯一标识
   kit: ExpressionKit
@@ -89,16 +101,16 @@ export interface ExpressionRecordRootAction extends ExpressionNormalRecord {
 export type ExpressionKit = {
   [key: string]: ExpressionKit
   [key: number]: ExpressionKit
-  [ExpressionKitBridgeSymbol]: ExpressionKitBridge | null
   [ExpressionKitAccompanySymbol]: any
   [ExpressionKitSymbol]: true
+  [ExpressionKitDataSymbol]: ExpressionKitData
 }
 
 export type ExpressionRecords = {
-  [ExpressionRecordType.Get]: ExpressionRecordGetAction
-  [ExpressionRecordType.Call]: ExpressionRecordCallAction
-  [ExpressionRecordType.Value]: ExpressionRecordValueAction,
-  [ExpressionRecordType.Root]: ExpressionRecordRootAction
+  [ExpressionRecordType.Get]: ExpressionRecordGetType
+  [ExpressionRecordType.Call]: ExpressionRecordCallType
+  [ExpressionRecordType.Value]: ExpressionRecordValueType,
+  [ExpressionRecordType.Root]: ExpressionRecordRootType
 }
 
 export type ExpressionRecord = ExpressionRecords[ExpressionRecordType]
@@ -110,12 +122,76 @@ export function createRecord<T extends ExpressionRecordType>(
   return {
     type,
     ...record,
-    [IsExpressionRecord]: true,
+    [ExpressionRecordSymbol]: true,
   } as any
 }
 
-const defaultHandlers: ProxyHandler<Function> = {
-  // TODO: 对其他的 handler 进行处理
+const defaultHandlers: ProxyHandler<ExpressionKitScapegoat> = {
+  get({data}, name) {
+    if (typeof name === 'symbol') {
+      switch(name) {
+        case ExpressionKitBridgeSymbol:
+          return data.bridge
+        case ExpressionKitSymbol:
+          return true
+        case ExpressionKitDataSymbol:
+          return data
+        case ExpressionKitAccompanySymbol:
+          return data.accompany
+
+        case Symbol.toPrimitive:
+          throw new Error('Cannot transform kit to primitive value used by index or others.')
+        case Symbol.iterator:
+          throw new Error('Cannot traverse kit')
+        case Symbol.asyncIterator:
+          throw new Error('Cannot use for-await-of for kit')
+        case Symbol.toStringTag:
+          return '[object ExpressionKit]'
+        default:
+          throw new Error(`Cannot use ${String(name)} symbol as key for expression kit`)
+      }
+    }
+
+    let bridge = data.bridges.get(name)
+
+    if (bridge) {
+      return bridge.dest
+    }
+
+    bridge = {
+      action: ExpressionBridgeAction.Get,
+      name,
+      from: data.kit,
+      dest: null as any, // placeholder
+    }
+
+    const nextKit = createKit(bridge)
+    bridge.dest = nextKit
+    data.bridges.set(name, bridge)
+
+    return nextKit
+  },
+  apply({data}, __, args) {
+    const bridge: ExpressionBridgeOfCall = {
+      action: ExpressionBridgeAction.Call,
+      args,
+      from: data.kit,
+      dest: null as any, // placeholder
+    }
+
+    const nextKit = createKit(bridge)
+    bridge.dest = nextKit
+    return nextKit
+  },
+  set({data}, name, value) {
+    switch(name) {
+      case ExpressionKitAccompanySymbol:
+        return Reflect.set(data, 'accompany', value)
+      case ExpressionKitDataSymbol:
+        throw new Error('You cannot set expression kit data')
+    }
+    return false
+  },
   has(_, key) {
     if (typeof key !== 'symbol') {
       return true
@@ -129,80 +205,67 @@ const defaultHandlers: ProxyHandler<Function> = {
     }
   },
   ownKeys() {
+    throw new Error('Cannot invoke Object.keys for kit')
+  },
+  construct() {
+    throw new Error('Cannot use kit as constructor')
+  },
+  defineProperty(){
+    return false
+  },
+  deleteProperty(){
+    return false
+  },
+  enumerate() {
     return []
   },
+  getOwnPropertyDescriptor() {
+    return undefined
+  },
+  getPrototypeOf() {
+    return null
+  },
+  isExtensible() {
+    return false
+  },
+  preventExtensions() {
+    return true
+  },
+  setPrototypeOf() {
+    throw new Error('Cannot set prototype of kit')
+  }
 }
 
-export function createKit(selfBridge: ExpressionKitBridge | null = null): ExpressionKit {
+export function createKit(selfBridge: ExpressionBridge | null = null): ExpressionKit {
   // 采用函数作为被代理的对象，目的是既可以支持 Call 又可以支持 Get
-  const scapegoat = function scapegoat() {}
-  const bridges = new Map<string | number, ExpressionKitBridge>()
-  let accompany: any = null
+  const data: ExpressionKitData = {
+    bridge: selfBridge,
+    bridges: new Map<string | number, ExpressionBridge>(),
+    accompany: null,
+    // placeholder
+    kit: null as any
+  }
 
-  const kit = new Proxy<any>(scapegoat, {
-    ...defaultHandlers,
-    get: (_, name) => {
-      if (typeof name === 'symbol') {
-        // TODO: 对一些常用的 symbol 进行处理
-        switch(name) {
-          case ExpressionKitBridgeSymbol:
-            return selfBridge
-          case ExpressionKitSymbol:
-            return true
-          case ExpressionKitAccompanySymbol:
-            return accompany
-          case Symbol.toPrimitive:
-            throw new Error('Cannot transform kit to primitive value used by index or others.')
-          default:
-            throw new Error(`Cannot use ${String(name)} symbol as key for expression kit`)
-        }
-      }
-
-      let bridge = bridges.get(name)
-
-      if (bridge) {
-        return bridge.dest
-      }
-
-      bridge = {
-        action: ExpAction.Get,
-        name,
-        from: kit,
-        dest: kit, // placeholder
-      }
-
-      const nextKit = createKit(bridge)
-      bridge.dest = nextKit
-      bridges.set(name, bridge)
-
-      return nextKit
-    },
-    apply: (_, __, args) => {
-      const bridge: ExpressionKitBridgeOfCall = {
-        action: ExpAction.Call,
-        args,
-        from: kit,
-        dest: kit, // placeholder
-      }
-
-      const nextKit = createKit(bridge)
-      bridge.dest = nextKit
-      return nextKit
-    },
-    set(_, name, value) {
-      if (name === ExpressionKitAccompanySymbol) {
-        accompany = value
-        return true
-      }
-      return false
-    }
+  const scapegoat: ExpressionKitScapegoat = Object.assign(function scapegoat() {}, {
+    data
   })
+
+  const kit = new Proxy<ExpressionKitScapegoat>(scapegoat, defaultHandlers) as unknown as ExpressionKit
+
+  data.kit = kit
 
   return kit
 }
 
-export function getExpressionKitBridge(kit: ExpressionKit): ExpressionKitBridge | null {
-  return isExprKit(kit) ? kit[ExpressionKitBridgeSymbol] : null
+export function getExpressionKitData(kit: ExpressionKit): ExpressionKitData
+export function getExpressionKitData(kit: any): ExpressionKitData | null
+export function getExpressionKitData(kit: any) {
+  return isExprKit(kit) ? kit[ExpressionKitDataSymbol] : null
+}
+
+export function getExpressionKitBridge(kit: ExpressionKit): ExpressionBridge | null {
+  const data = getExpressionKitData(kit)
+  return data && data.bridge
 }
 
 export function generateRecord(kit: ExpressionKit, records: WeakMap<any, ExpressionRecord> = new WeakMap()): ExpressionRecord {
@@ -210,7 +273,7 @@ export function generateRecord(kit: ExpressionKit, records: WeakMap<any, Express
     return createRecord(ExpressionRecordType.Value, {value: kit})
   }
 
-  const bridge = getExpressionKitBridge(kit)
+  const { bridge } = getExpressionKitData(kit)
 
   if (bridge === null) {
     // 对于根来说，是没有边的，所以这里直接使用 kit 代替
@@ -224,7 +287,7 @@ export function generateRecord(kit: ExpressionKit, records: WeakMap<any, Express
     if (records.has(bridge)) {
       return records.get(bridge)!
     }
-    if (bridge.action === ExpAction.Get) {
+    if (bridge.action === ExpressionBridgeAction.Get) {
       const names = [bridge.name]
       let root = bridge.from
       while(true) {
@@ -234,7 +297,7 @@ export function generateRecord(kit: ExpressionKit, records: WeakMap<any, Express
           break
         }
 
-        if (edge.action === ExpAction.Get) {
+        if (edge.action === ExpressionBridgeAction.Get) {
           // 只有 get 才做才会持续循环并找到虚根
           root = edge.from
           names.unshift(edge.name)
@@ -267,7 +330,7 @@ export function isExprKit(kit: any): kit is ExpressionKit {
 }
 
 export function isExpressionRecord(record: any): record is ExpressionRecord {
-  return !!(record && record[IsExpressionRecord] === true)
+  return !!(record && record[ExpressionRecordSymbol] === true)
 }
 
 /**
@@ -295,7 +358,7 @@ export function _replayExpr(record: ExpressionRecord, valueMap: WeakMap<any, any
       return valueMap.has(kit) ? valueMap.get(kit) : kit[ExpressionKitAccompanySymbol]
     }
     case ExpressionRecordType.Value:
-      // TODO: 有可能是复合型值，要递归深入去考虑
+      // TODO: 有可能是复合型值，要递归深入
       return record.value
     case ExpressionRecordType.Get:
       const root = _replayExpr(record.root, valueMap)

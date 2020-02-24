@@ -3,13 +3,15 @@ import { EjsTemplateFormatter } from './ejs'
 import { recordExpr, Expression } from '../expression'
 import { renderToString } from '../../../renderer/src'
 import { renderNode, LoopCase } from './case.helper'
+import { Operator } from '../operator'
 
 describe('EjsTemplateFormatter#interpolate', () => {
   const ejs = new EjsTemplateFormatter()
 
   function formatTest(expr: Expression<any>, expected: string) {
     const result = ejs.interpolate(recordExpr(expr))
-    expect(result).toStrictEqual(`<%= ${expected} %>`)
+    expect(result).toBeInstanceOf(String)
+    expect(result.toString()).toBe(`<%= ${expected} %>`)
   }
 
   it('should correct when render property access chain', () => {
@@ -18,6 +20,8 @@ describe('EjsTemplateFormatter#interpolate', () => {
 
   it('should correct for function call', () => {
     formatTest(v => v.a.b(), 'a.b()')
+    formatTest(v => v.a().b, 'a().b')
+    formatTest(v => v.a()().b(), 'a()().b()')
   })
 
   it('should render function call with args', () => {
@@ -34,6 +38,29 @@ describe('EjsTemplateFormatter#interpolate', () => {
 
   it('should output raw string', () => {
     expect(renderToString(<i>{ejs.interpolate(recordExpr(v => v.a))}</i>)).toBe('<i><%= a %></i>')
+  })
+
+  it.each<[string, Expression<any>, string]>([
+    ['And', (v) => Operator.And(v.a, v.b, v.c), '(a) && (b) && (c)'],
+    ['Or', v => Operator.Or(v.a, v.b, v.c), '(a) || (b) || (c)'],
+    ['Not', v => Operator.Not(v.a), '!(a)'],
+    ['Add', v => Operator.Add(v.a, v.b, v.c), '(a) + (b) + (c)'],
+    ['Sub', v => Operator.Sub(v.a, v.b, v.c), '(a) - (b) - (c)'],
+    ['Mul', v => Operator.Mul(v.a, v.b, v.c), '(a) * (b) * (c)'],
+    ['Div', v => Operator.Div(v.a, v.b, v.c), '(a) / (b) / (c)'],
+    ['Mod', v => Operator.Mod(v.a, v.b), '(a) % (b)'],
+    ['Concat', v => Operator.Concat(v.a, v.b, v.c), '(a) + (b) + (c)'],
+    ['Substr', v => Operator.Substr(v.a, v.b, v.c), '(a).substr(b, c)'],
+    ['Substr with primary number', v => Operator.Substr(v.a, 1), '(a).substr(1)'],
+    ['Get', v => Operator.Get(v.a, v.b), '(a)[b]'],
+    ['Get with number index', v => Operator.Get(v.a, 2), '(a)[2]'],
+    ['Get with string index', v => Operator.Get(v.a, 'key'), '(a)["key"]']
+  ])('should render correct operator for %s', (_, expr, expected) => {
+    formatTest(expr, expected)
+  })
+
+  it.skip('should render necessary parentheses', () => {
+    formatTest(v => Operator.Not(Operator.And(v.a, v.b)), '!(v.a && v.b)')
   })
 })
 

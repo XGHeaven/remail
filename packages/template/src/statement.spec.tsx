@@ -3,19 +3,9 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { Expression } from './expression'
 import { Operator as Logic} from './operator'
 import { TemplateProvider, Interpolate, TemplateExpressionContext, ForEach, If } from './statement'
-import { createKit } from '../lib'
+import { createKit } from '../src'
 
 describe('Interpolate', () => {
-  function expectInter(expr: Expression<any>, value: any, expected: string) {
-    expect(
-      renderToStaticMarkup(
-        <TemplateProvider value={{ formatter: {} as any, value }}>
-          <Interpolate expr={expr} />
-        </TemplateProvider>,
-      ),
-    ).toBe(expected)
-  }
-
   it('should accept expr props', () => {
     expect(
       renderToStaticMarkup(

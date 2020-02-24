@@ -19,9 +19,9 @@ export const TemplateContext = createContext<{
     interpolate: createNoop('interpolate'),
     condition: createNoop('condition'),
     loop: createNoop('loop'),
+    isOperatorCall: createNoop('isOperatorCall')
   },
   value: null,
-  // forEachFormat: createNoop('forEachFormat')
 })
 
 export const TemplateProvider = TemplateContext.Provider

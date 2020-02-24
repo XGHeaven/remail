@@ -33,10 +33,8 @@ const OperatorImplement = {
   Add: createSeriesOperatorFuntion<number>('+'),
   Sub: createSeriesOperatorFuntion<number>('-'),
   Mul: createSeriesOperatorFuntion<number>('*'),
-  Div: (num: number, den: number) => num / den,
+  Div: createSeriesOperatorFuntion<number>('/'),
   Mod: (num: number, den: number) => num % den,
-  Inc: createUnaryOperatorFunction<number>('1 + '),
-  Dec: createUnaryOperatorFunction<number>('-1 + '),
   Get: <O, K extends keyof O>(obj: O, key: K): O[K] => {
     return obj[key]
   },
