@@ -133,6 +133,17 @@ describe('renderer/RemailRenderer', () => {
       expect(value).toBe(true)
     })
 
+    it('should works with default context value', () => {
+      const Context = createContext('foo')
+
+      const App = () => {
+        const v = useContext(Context)
+
+        return <p>{v}</p>
+      }
+      expect(run(<App/>)).toBe('<p>foo</p>')
+    })
+
     it('should works with context by hooks', () => {
       const Context = createContext(false)
       const App: FC<any> = () => {
@@ -374,6 +385,35 @@ describe('renderer/RemailRenderer', () => {
     it('begin hook should change root element', () => {
       const begin = jest.fn(v => <i>{v}</i>)
       expect(runPlugin(<i>1</i>, { begin })).toBe('<i><i>1</i></i>')
+    })
+  })
+
+  describe('parallel render', () => {
+    it('should works with context', () => {
+      const Context = createContext('')
+
+      function GetV() {
+        const v = useContext(Context)
+
+      return <p>{v}</p>
+      }
+
+      const node1 = <Context.Provider value="a"><div><GetV/></div></Context.Provider>
+      const node2 = <Context.Provider value="b"><div><GetV/></div></Context.Provider>
+
+      const render1 = new RemailRenderer(node1)
+      const render2 = new RemailRenderer(node2)
+
+      let out1 = ''
+      let out2 = ''
+
+      while (!render1.finished && !render2.finished) {
+        out1 += render1.next()
+        out2 += render2.next()
+      }
+
+      expect(out1).toBe('<div><p>a</p></div>')
+      expect(out2).toBe('<div><p>b</p></div>')
     })
   })
 })

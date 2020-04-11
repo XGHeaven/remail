@@ -223,32 +223,42 @@ function bailoutNullHook(hook: Hook<any>) {
 }
 
 export class RemailRenderer {
-  private contextStack: any[] = []
-  options: RemailRendererOptions
+  private contextStacks = new Map<Context<any>, any[]>()
   private it: Iterator<string, void, void> | null = null
+  options: RemailRendererOptions
+
+  private _readContext = (ctx: any) => {
+    return this.contextStacks.get(ctx)?.[0] ?? (ctx as any)._currentValue
+  }
+
+  private dispatcher = {
+    ...HooksDispatcher,
+    useContext: this._readContext,
+    readContext: this._readContext
+  }
+
   finished = false
-  hooks: RendererPluginHooks
+
+  hooks: RendererPluginHooks = {
+    normalizeProps: passUndefinedHook(
+      new SyncWaterfallHook<any>(['props', 'element']),
+    ),
+    stringifyProps: passUndefinedHook(
+      new SyncWaterfallHook<any>(['props', 'element']),
+    ),
+    visit: bailoutNullHook(
+      passUndefinedHook(
+        new SyncWaterfallHook<any>(['node']),
+      ),
+    ),
+    begin: passUndefinedHook(
+      new SyncWaterfallHook<any>(['root']),
+    ),
+    end: new SyncHook(),
+  }
 
   constructor(private rootElement: ReactElement, options: Partial<RemailRendererOptions> = {}) {
     this.options = Object.assign({}, defaultOptions, options)
-
-    this.hooks = {
-      normalizeProps: passUndefinedHook(
-        new SyncWaterfallHook<any>(['props', 'element']),
-      ),
-      stringifyProps: passUndefinedHook(
-        new SyncWaterfallHook<any>(['props', 'element']),
-      ),
-      visit: bailoutNullHook(
-        passUndefinedHook(
-          new SyncWaterfallHook<any>(['node']),
-        ),
-      ),
-      begin: passUndefinedHook(
-        new SyncWaterfallHook<any>(['root']),
-      ),
-      end: new SyncHook(),
-    }
 
     for (const plugin of this.options.plugins) {
       plugin.install(this)
@@ -270,15 +280,20 @@ export class RemailRenderer {
   }
 
   private pushProvider(context: Context<any>, value: any) {
-    const internalContext: any = (context as any)._context
-    const preValue = internalContext._currentValue
-    this.contextStack.push(preValue)
-    internalContext._currentValue = value
+    const internal: any = (context as any)._context
+    const stacks = this.contextStacks.get(internal) ?? []
+    stacks.unshift(value)
+    this.contextStacks.set(internal, stacks)
   }
 
   private popProvider(context: Context<any>) {
-    const value = this.contextStack.pop()
-    ;(context as any)._context._currentValue = value
+    const internal = (context as any)._context
+    const stacks = this.contextStacks.get(internal) ?? []
+    const value = stacks.shift()
+    if (stacks.length === 0) {
+      this.contextStacks.delete(internal)
+    }
+
     return value
   }
 
@@ -359,7 +374,7 @@ export class RemailRenderer {
         }
 
         const prevDispatcher = ReactCurrentDispatcher.current
-        ReactCurrentDispatcher.current = HooksDispatcher
+        ReactCurrentDispatcher.current = this.dispatcher
 
         const returnChildren = type({
           ...props,
@@ -410,7 +425,7 @@ export class RemailRenderer {
           }
 
           case REACT_CONTEXT_TYPE: {
-            const value = readContext((type as unknown) as Context<any>)
+            const value = this._readContext((type as any)._context as Context<any>)
             if (typeof children !== 'function') {
               console.warn('Context children only be function')
               return yield ''
