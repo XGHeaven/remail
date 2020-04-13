@@ -9,7 +9,7 @@
       "request": "launch",
       "name": "Jest Test",
       "program": "${workspaceFolder}/node_modules/.bin/jest",
-      "args": ["--runInBand"],
+      "args": ["--runInBand", "packages/renderer/src/renderer"],
       // "console": "integratedTerminal",
       // "internalConsoleOptions": "neverOpen"
     }

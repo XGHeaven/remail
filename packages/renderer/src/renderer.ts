@@ -1,4 +1,4 @@
-import { ReactNode, ReactElement, isValidElement, Context, ClassicComponentClass, FC, createElement } from 'react'
+import { ReactNode, ReactElement, isValidElement, Context, ClassicComponentClass, FC, createElement, Children } from 'react'
 import { SyncHook, SyncWaterfallHook, Hook } from 'tapable'
 import { escapeTextForBrowser } from './react-server-render/escapeTextForBrowser'
 import {
@@ -222,10 +222,33 @@ function bailoutNullHook(hook: Hook<any>) {
   return hook
 }
 
+interface Frame {
+  node: ReactNode,
+  index: number
+  children: ReactNode[]
+}
+
+function createFrame(node: ReactNode, children: ReactNode[] = []): Frame {
+  let index = 0
+  if (isValidElement(node) && 'children' in node.props) {
+    if (Array.isArray(node.props.children)) {
+      children = node.props.children
+    } else {
+      children = [node.props.children]
+    }
+  }
+
+  return {
+    node, index, children: children!
+  }
+}
+
 export class RemailRenderer {
   private contextStacks = new Map<Context<any>, any[]>()
   private it: Iterator<string, void, void> | null = null
   options: RemailRendererOptions
+
+  private stacks: Frame[] = []
 
   private _readContext = (ctx: any) => {
     return this.contextStacks.get(ctx)?.[0] ?? (ctx as any)._currentValue
@@ -270,6 +293,7 @@ export class RemailRenderer {
       { value: { isServer: true } },
       this.hook('begin', rootElement),
     )
+    this.stacks.push(createFrame(rootElement))
   }
 
   private hook<N extends keyof RendererPluginHooks>(
@@ -307,12 +331,195 @@ export class RemailRenderer {
       return this.options.doctype || ''
     }
 
-    const { value, done } = this.it.next()
-    if (done) {
+    const value = this.getNextString()
+    if (!this.stacks.length) {
       this.finished = true
       this.hook('end')
     }
     return value || ''
+  }
+
+  private getNextString(): string {
+    const frame = this.stacks.pop()!
+    const { node } = frame
+
+    if (frame.index > 0) {
+      // return
+      // node must be a ReactElement
+      const { type } = node as ReactElement
+      if (Array.isArray(type)) {
+        if (frame.index < type.length) {
+          this.stacks.push(frame)
+          this.stacks.push(createFrame(type[frame.index]))
+          frame.index++
+        }
+        return ''
+      } if (frame.index < frame.children.length) {
+        this.stacks.push(frame)
+        this.stacks.push(createFrame(frame.children[frame.index]))
+        frame.index++
+        return ''
+      } else if (typeof type === 'string') {
+        return `</${type.toLowerCase()}>`
+      } else if (type && (type as any).$$typeof === REACT_PROVIDER_TYPE) {
+        this.popProvider((type as any)._context)
+      } else {
+        return ''
+      }
+    }
+
+    if (typeof node === 'undefined' || node === null || typeof node === 'boolean') {
+      return ''
+    } else if (typeof node === 'string' || typeof node === 'number') {
+      return escapeTextForBrowser('' + node)
+    } else if (typeof node === 'function') {
+      // 会保证不会传入函数
+      return ''
+    } else if (Array.isArray(node)) {
+      this.stacks.push(frame)
+      this.stacks.unshift(createFrame(node[frame.index]))
+      frame.index++
+      return ''
+    } else if (isValidElement(node)) {
+      const newNode = frame.index === 0 ? this.hook('visit', node) : node
+      if (newNode === null) {
+        return ''
+      }
+      const {
+        type,
+        props,
+      } = newNode
+      if (typeof type === 'string') {
+        // host component
+        // TODO: 针对不同的标签对 props 进行处理，但是由于邮件模板不会用到这些特殊标签，所以暂时不处理
+        const tag = type.toLowerCase()
+        let html = `<${tag}`
+        const dangerHtml = props.dangerouslySetInnerHTML
+        const propsString = stringifyProps(
+          this.hook('stringifyProps', normalizeProps(this.hook('normalizeProps', props, node)), node),
+        )
+        if (propsString) {
+          html += ' ' + propsString
+        }
+
+        if (isSelfCloseTag(tag)) {
+          return html + ' />'
+        }
+
+        html += '>'
+        if (dangerHtml && dangerHtml.__html) {
+          return `${html}${dangerHtml.__html}</${tag}>`
+        } else if(frame.children.length) {
+          this.stacks.push(frame)
+          this.stacks.push(createFrame(frame.children[frame.index]))
+          frame.index++
+          return html
+        } else {
+          return ''
+        }
+      } else if (typeof type === 'function') {
+        // class 组件或者是函数式组件
+        if (isClassComponent(type)) {
+          const instance = new type(props)
+          const returnChildren = instance.render()
+          this.stacks.push(createFrame(returnChildren))
+          return ''
+        } else if (!isFunctionComponent(type)) {
+          console.warn(`${(type as any).displayName || type.name} component it not support yet`)
+          return ''
+        }
+
+        const prevDispatcher = ReactCurrentDispatcher.current
+        ReactCurrentDispatcher.current = this.dispatcher
+
+        const returnChildren = type(props)
+
+        ReactCurrentDispatcher.current = prevDispatcher
+
+        this.stacks.push(createFrame(returnChildren))
+        return ''
+      } else {
+        // 内置类型
+        // 以下通过 $$typeof 确定类型
+        // Context Context.Provider Context.Consumer
+        // 以下本身就是 Symbol
+        // Fragment
+        const $$typeof = typeof type === 'symbol' ? type : ((type as any)['$$typeof'] as symbol)
+        switch ($$typeof) {
+          // 这些组件是会对渲染树产生影响的，所以给予警告提示
+          case REACT_PORTAL_TYPE:
+          case REACT_FORWARD_REF_TYPE:
+          case REACT_MEMO_TYPE:
+          case REACT_LAZY_TYPE:
+          case REACT_FUNDAMENTAL_TYPE:
+          case REACT_RESPONDER_TYPE:
+          case REACT_SCOPE_TYPE:
+          case REACT_SUSPENSE_TYPE:
+          case REACT_SUSPENSE_LIST_TYPE: {
+            console.warn(`${Symbol.keyFor($$typeof)} is not support, fallback to Fragment`)
+            if (props.children) {
+              this.stacks.push(createFrame(props.children))
+            }
+            return ''
+          }
+
+          // 下面这些组件本身不会修改组件树，所以可以直接当做 Fragment
+          case REACT_ASYNC_MODE_TYPE:
+          case REACT_CONCURRENT_MODE_TYPE:
+          case REACT_PROFILER_TYPE:
+          case REACT_STRICT_MODE_TYPE:
+          case REACT_FRAGMENT_TYPE: {
+            if (props.children) {
+              this.stacks.push(createFrame(props.children))
+            }
+            return ''
+          }
+
+          case REACT_PROVIDER_TYPE: {
+            const context: Context<any> = type as any
+            if (frame.index > frame.children.length) {
+              // return
+              this.popProvider(context)
+            } else {
+              // enter
+              if (frame.children.length) {
+                const { value } = props
+                this.pushProvider(context, value)
+                this.stacks.push(frame)
+                this.stacks.push(createFrame(frame.children))
+                frame.index++
+              }
+            }
+            return ''
+          }
+
+          case REACT_CONTEXT_TYPE: {
+            const value = this._readContext((type as any)._context as Context<any>)
+            if (typeof props.children !== 'function') {
+              console.warn('Context children only be function')
+              return ''
+            }
+
+            const newChildren = props.children(value)
+
+            this.stacks.push(createFrame(newChildren))
+            return ''
+          }
+          default:
+            console.warn(`Cannot support ${String($$typeof)} as jsx element`)
+            return ''
+        }
+      }
+    } else if (node instanceof String) {
+      // raw string
+      return node.toString()
+    } else if (typeof node === 'object') {
+      throw new Error(
+        'Objects are not valid as a React child. If you meant to render a collection of children, use an array instead.',
+      )
+    } else {
+      return ''
+    }
   }
 
   private *generateNextNode(node: ReactNode): Generator<string, void, void> {
