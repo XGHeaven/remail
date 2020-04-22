@@ -35,6 +35,7 @@ import { RendererContext } from './context'
 export type NonUndefined<T> = T extends undefined ? never : T
 
 const { ReactCurrentDispatcher } = ReactSharedInternals
+const { toArray } = Children
 
 function normalizeProps(props: OriginalProps): NormalizedProps {
   return Object.keys(props).reduce((newProps, name) => {
@@ -225,33 +226,34 @@ function bailoutNullHook(hook: Hook<any>) {
 interface Frame {
   node: ReactNode,
   index: number
-  children: ReactNode[]
+  children: ReactNode[],
+  return: string
 }
 
-function createFrame(node: ReactNode, children: ReactNode[] = []): Frame {
-  let index = 0
-  if (isValidElement(node) && 'children' in node.props) {
-    if (Array.isArray(node.props.children)) {
-      children = node.props.children
-    } else {
-      children = [node.props.children]
-    }
-  }
+function createFrame(node: ReactElement, children: ReactNode[] = []): Frame {
+  children = toArray(node.props.children)
 
   return {
-    node, index, children: children!
+    node, index: 0, children, return: ''
   }
+}
+
+function reuseFrame(frame: Frame, node: ReactElement) {
+  frame.node = node
+  frame.index = 0
+  frame.return = ''
+  frame.children = toArray(node.props.children)
 }
 
 export class RemailRenderer {
   private contextStacks = new Map<Context<any>, any[]>()
-  private it: Iterator<string, void, void> | null = null
   options: RemailRendererOptions
 
-  private stacks: Frame[] = []
+  private stacks: Frame[]
 
   private _readContext = (ctx: any) => {
-    return this.contextStacks.get(ctx)?.[0] ?? (ctx as any)._currentValue
+    const stacks = this.contextStacks.get(ctx) ?? []
+    return stacks[stacks.length - 1] ?? ctx._currentValue
   }
 
   private dispatcher = {
@@ -281,19 +283,19 @@ export class RemailRenderer {
   }
 
   constructor(private rootElement: ReactElement, options: Partial<RemailRendererOptions> = {}) {
-    this.options = Object.assign({}, defaultOptions, options)
+    this.options = {...defaultOptions, ...options}
 
     for (const plugin of this.options.plugins) {
       plugin.install(this)
     }
 
-    // wrap element with RendererContext
-    this.rootElement = createElement(
-      RendererContext.Provider,
-      { value: { isServer: true } },
-      this.hook('begin', rootElement),
-    )
-    this.stacks.push(createFrame(rootElement))
+    this.rootElement = rootElement
+    this.stacks = [{
+      node: null,
+      children: [rootElement],
+      index: 0,
+      return: '',
+    }]
   }
 
   private hook<N extends keyof RendererPluginHooks>(
@@ -304,20 +306,14 @@ export class RemailRenderer {
   }
 
   private pushProvider(context: Context<any>, value: any) {
-    const internal: any = (context as any)._context
-    const stacks = this.contextStacks.get(internal) ?? []
-    stacks.unshift(value)
-    this.contextStacks.set(internal, stacks)
+    const stacks = this.contextStacks.get(context) ?? []
+    stacks.push(value)
+    this.contextStacks.set(context, stacks)
   }
 
   private popProvider(context: Context<any>) {
-    const internal = (context as any)._context
-    const stacks = this.contextStacks.get(internal) ?? []
-    const value = stacks.shift()
-    if (stacks.length === 0) {
-      this.contextStacks.delete(internal)
-    }
-
+    const stacks = this.contextStacks.get(context) ?? []
+    const value = stacks.pop()
     return value
   }
 
@@ -326,78 +322,33 @@ export class RemailRenderer {
       return ''
     }
 
-    if (!this.it) {
-      this.it = this.generateNextNode(this.rootElement)
-      return this.options.doctype || ''
-    }
-
-    const value = this.getNextString()
-    if (!this.stacks.length) {
-      this.finished = true
-      this.hook('end')
-    }
-    return value || ''
+    return this.getNextString()
   }
 
-  private getNextString(): string {
-    const frame = this.stacks.pop()!
-    const { node } = frame
-
-    if (frame.index > 0) {
-      // return
-      // node must be a ReactElement
-      const { type } = node as ReactElement
-      if (Array.isArray(type)) {
-        if (frame.index < type.length) {
-          this.stacks.push(frame)
-          this.stacks.push(createFrame(type[frame.index]))
-          frame.index++
-        }
-        return ''
-      } if (frame.index < frame.children.length) {
-        this.stacks.push(frame)
-        this.stacks.push(createFrame(frame.children[frame.index]))
-        frame.index++
-        return ''
-      } else if (typeof type === 'string') {
-        return `</${type.toLowerCase()}>`
-      } else if (type && (type as any).$$typeof === REACT_PROVIDER_TYPE) {
-        this.popProvider((type as any)._context)
-      } else {
-        return ''
-      }
+  private render(node: ReactNode): string | null {
+    if (node === undefined || node === null) {
+      return null
     }
-
-    if (typeof node === 'undefined' || node === null || typeof node === 'boolean') {
-      return ''
-    } else if (typeof node === 'string' || typeof node === 'number') {
+    if (typeof node === 'string' || typeof node === 'number') {
       return escapeTextForBrowser('' + node)
-    } else if (typeof node === 'function') {
-      // 会保证不会传入函数
-      return ''
-    } else if (Array.isArray(node)) {
-      this.stacks.push(frame)
-      this.stacks.unshift(createFrame(node[frame.index]))
-      frame.index++
-      return ''
-    } else if (isValidElement(node)) {
-      const newNode = frame.index === 0 ? this.hook('visit', node) : node
+    } else {
+      // must be react element
+      const newNode = this.hook('visit', node as ReactElement)
+
       if (newNode === null) {
-        return ''
+        return null
       }
-      const {
-        type,
-        props,
-      } = newNode
+
+      const { type, props } = newNode as ReactElement
+
       if (typeof type === 'string') {
-        // host component
-        // TODO: 针对不同的标签对 props 进行处理，但是由于邮件模板不会用到这些特殊标签，所以暂时不处理
         const tag = type.toLowerCase()
-        let html = `<${tag}`
+        let html = '<' + tag
         const dangerHtml = props.dangerouslySetInnerHTML
         const propsString = stringifyProps(
-          this.hook('stringifyProps', normalizeProps(this.hook('normalizeProps', props, node)), node),
+          this.hook('stringifyProps', normalizeProps(this.hook('normalizeProps', props, newNode)), newNode),
         )
+
         if (propsString) {
           html += ' ' + propsString
         }
@@ -409,250 +360,476 @@ export class RemailRenderer {
         html += '>'
         if (dangerHtml && dangerHtml.__html) {
           return `${html}${dangerHtml.__html}</${tag}>`
-        } else if(frame.children.length) {
-          this.stacks.push(frame)
-          this.stacks.push(createFrame(frame.children[frame.index]))
-          frame.index++
-          return html
-        } else {
-          return ''
-        }
-      } else if (typeof type === 'function') {
-        // class 组件或者是函数式组件
-        if (isClassComponent(type)) {
-          const instance = new type(props)
-          const returnChildren = instance.render()
-          this.stacks.push(createFrame(returnChildren))
-          return ''
-        } else if (!isFunctionComponent(type)) {
-          console.warn(`${(type as any).displayName || type.name} component it not support yet`)
-          return ''
         }
 
-        const prevDispatcher = ReactCurrentDispatcher.current
-        ReactCurrentDispatcher.current = this.dispatcher
-
-        const returnChildren = type(props)
-
-        ReactCurrentDispatcher.current = prevDispatcher
-
-        this.stacks.push(createFrame(returnChildren))
-        return ''
-      } else {
-        // 内置类型
-        // 以下通过 $$typeof 确定类型
-        // Context Context.Provider Context.Consumer
-        // 以下本身就是 Symbol
-        // Fragment
-        const $$typeof = typeof type === 'symbol' ? type : ((type as any)['$$typeof'] as symbol)
-        switch ($$typeof) {
-          // 这些组件是会对渲染树产生影响的，所以给予警告提示
-          case REACT_PORTAL_TYPE:
-          case REACT_FORWARD_REF_TYPE:
-          case REACT_MEMO_TYPE:
-          case REACT_LAZY_TYPE:
-          case REACT_FUNDAMENTAL_TYPE:
-          case REACT_RESPONDER_TYPE:
-          case REACT_SCOPE_TYPE:
-          case REACT_SUSPENSE_TYPE:
-          case REACT_SUSPENSE_LIST_TYPE: {
-            console.warn(`${Symbol.keyFor($$typeof)} is not support, fallback to Fragment`)
-            if (props.children) {
-              this.stacks.push(createFrame(props.children))
-            }
-            return ''
-          }
-
-          // 下面这些组件本身不会修改组件树，所以可以直接当做 Fragment
-          case REACT_ASYNC_MODE_TYPE:
-          case REACT_CONCURRENT_MODE_TYPE:
-          case REACT_PROFILER_TYPE:
-          case REACT_STRICT_MODE_TYPE:
-          case REACT_FRAGMENT_TYPE: {
-            if (props.children) {
-              this.stacks.push(createFrame(props.children))
-            }
-            return ''
-          }
-
-          case REACT_PROVIDER_TYPE: {
-            const context: Context<any> = type as any
-            if (frame.index > frame.children.length) {
-              // return
-              this.popProvider(context)
-            } else {
-              // enter
-              if (frame.children.length) {
-                const { value } = props
-                this.pushProvider(context, value)
-                this.stacks.push(frame)
-                this.stacks.push(createFrame(frame.children))
-                frame.index++
-              }
-            }
-            return ''
-          }
-
-          case REACT_CONTEXT_TYPE: {
-            const value = this._readContext((type as any)._context as Context<any>)
-            if (typeof props.children !== 'function') {
-              console.warn('Context children only be function')
-              return ''
-            }
-
-            const newChildren = props.children(value)
-
-            this.stacks.push(createFrame(newChildren))
-            return ''
-          }
-          default:
-            console.warn(`Cannot support ${String($$typeof)} as jsx element`)
-            return ''
-        }
-      }
-    } else if (node instanceof String) {
-      // raw string
-      return node.toString()
-    } else if (typeof node === 'object') {
-      throw new Error(
-        'Objects are not valid as a React child. If you meant to render a collection of children, use an array instead.',
-      )
-    } else {
-      return ''
-    }
-  }
-
-  private *generateNextNode(node: ReactNode): Generator<string, void, void> {
-    if (typeof node === 'undefined' || node === null || typeof node === 'boolean') {
-      yield ''
-    } else if (typeof node === 'string' || typeof node === 'number') {
-      yield escapeTextForBrowser('' + node)
-    } else if (typeof node === 'function') {
-      // 会保证不会传入函数
-      yield ''
-    } else if (Array.isArray(node)) {
-      for (const element of node) {
-        yield* this.generateNextNode(element)
-      }
-      yield ''
-    } else if (isValidElement(node)) {
-      const newNode = this.hook('visit', node)
-      if (newNode === null) {
-        return yield ''
-      }
-      const {
-        type,
-        props: { children, ...props },
-      } = newNode
-      if (typeof type === 'string') {
-        // host component
-        // TODO: 针对不同的标签对 props 进行处理，但是由于邮件模板不会用到这些特殊标签，所以暂时不处理
-        const tag = type.toLowerCase()
-        let html = `<${tag}`
-        const dangerHtml = props.dangerouslySetInnerHTML
-        const propsString = stringifyProps(
-          this.hook('stringifyProps', normalizeProps(this.hook('normalizeProps', props, node)), node),
-        )
-        if (propsString) {
-          html += ' ' + propsString
+        if (typeof props.children === 'string' || typeof props.children === 'number') {
+          return html + escapeTextForBrowser('' + props.children) + '</' + tag + '>'
         }
 
-        if (isSelfCloseTag(tag)) {
-          return yield html + ' />'
+        const newChildren = toArray(props.children)
+
+        if (newChildren.length === 0) {
+          return `${html}</${tag}>`
         }
 
-        html += '>'
-        if (dangerHtml && dangerHtml.__html) {
-          yield html + dangerHtml.__html
-        } else {
-          yield html
-          yield* this.generateNextNode(children)
-        }
-        yield `</${tag}>`
-      } else if (typeof type === 'function') {
-        // class 组件或者是函数式组件
-        if (isClassComponent(type)) {
-          const instance = new type({ ...props, children })
-          const returnChildren = instance.render()
-          return yield* this.generateNextNode(returnChildren)
-        } else if (!isFunctionComponent(type)) {
-          console.warn(`${(type as any).displayName || type.name} component it not support yet`)
-          return yield ''
-        }
-
-        const prevDispatcher = ReactCurrentDispatcher.current
-        ReactCurrentDispatcher.current = this.dispatcher
-
-        const returnChildren = type({
-          ...props,
-          children,
+        this.stacks.push({
+          node,
+          return: `</${tag}>`,
+          index: 0,
+          children: newChildren
         })
 
+        return html
+      } else if (typeof type === 'function') {
+        if (isClassComponent(type)) {
+          const instance = new type(props)
+          const returnChildren = toArray(instance.render())
+          this.stacks.push({
+            node,
+            return: '',
+            index: 0,
+            children: returnChildren
+          })
+          return null
+        } else if (!isFunctionComponent(type)) {
+          console.warn(`${(type as any).displayName || type.name} component it not support yet`)
+          return null
+        }
+
+        const prevDispatcher = ReactCurrentDispatcher.current
+        ReactCurrentDispatcher.current = this.dispatcher
+
+        const returnChildren = toArray(type(props))
+
         ReactCurrentDispatcher.current = prevDispatcher
-
-        yield* this.generateNextNode(returnChildren)
+        this.stacks.push({
+          node,
+          return: '',
+          index: 0,
+          children: returnChildren
+        })
+        return null
       } else {
-        // 内置类型
-        // 以下通过 $$typeof 确定类型
-        // Context Context.Provider Context.Consumer
-        // 以下本身就是 Symbol
-        // Fragment
-        const $$typeof = typeof type === 'symbol' ? type : ((type as any)['$$typeof'] as symbol)
-        switch ($$typeof) {
-          // 这些组件是会对渲染树产生影响的，所以给予警告提示
-          case REACT_PORTAL_TYPE:
-          case REACT_FORWARD_REF_TYPE:
-          case REACT_MEMO_TYPE:
-          case REACT_LAZY_TYPE:
-          case REACT_FUNDAMENTAL_TYPE:
-          case REACT_RESPONDER_TYPE:
-          case REACT_SCOPE_TYPE:
-          case REACT_SUSPENSE_TYPE:
-          case REACT_SUSPENSE_LIST_TYPE: {
-            console.warn(`${Symbol.keyFor($$typeof)} is not support, fallback to Fragment`)
-            return yield* this.generateNextNode(children)
-          }
+          // 内置类型
+          // 以下通过 $$typeof 确定类型
+          // Context Context.Provider Context.Consumer
+          // 以下本身就是 Symbol
+          // Fragment
+          const $$typeof = typeof type === 'symbol' ? type : ((type as any)['$$typeof'] as symbol)
+          switch ($$typeof) {
 
-          // 下面这些组件本身不会修改组件树，所以可以直接当做 Fragment
-          case REACT_ASYNC_MODE_TYPE:
-          case REACT_CONCURRENT_MODE_TYPE:
-          case REACT_PROFILER_TYPE:
-          case REACT_STRICT_MODE_TYPE:
-          case REACT_FRAGMENT_TYPE: {
-            return yield* this.generateNextNode(children)
-          }
-
-          case REACT_PROVIDER_TYPE: {
-            const context: Context<any> = type as any
-            const { value } = props
-            this.pushProvider(context, value)
-            yield* this.generateNextNode(children)
-            this.popProvider(context)
-            return
-          }
-
-          case REACT_CONTEXT_TYPE: {
-            const value = this._readContext((type as any)._context as Context<any>)
-            if (typeof children !== 'function') {
-              console.warn('Context children only be function')
-              return yield ''
+            // 这些组件是会对渲染树产生影响的，所以给予警告提示
+            case REACT_PORTAL_TYPE:
+            case REACT_FORWARD_REF_TYPE:
+            case REACT_MEMO_TYPE:
+            case REACT_LAZY_TYPE:
+            case REACT_FUNDAMENTAL_TYPE:
+            case REACT_RESPONDER_TYPE:
+            case REACT_SCOPE_TYPE:
+            case REACT_SUSPENSE_TYPE:
+            case REACT_SUSPENSE_LIST_TYPE: {
+              console.warn(`${Symbol.keyFor($$typeof)} is not support, fallback to Fragment`)
+            }
+            // 下面这些组件本身不会修改组件树，所以可以直接当做 Fragment
+            case REACT_ASYNC_MODE_TYPE:
+            case REACT_CONCURRENT_MODE_TYPE:
+            case REACT_PROFILER_TYPE:
+            case REACT_STRICT_MODE_TYPE:
+            case REACT_FRAGMENT_TYPE: {
+              // this.push(newNode)
+              this.stacks.push({node: newNode, return: '', index: 0, children: toArray(props.children)})
+              return null
             }
 
-            const newChildren = children(value)
-            return yield* this.generateNextNode(newChildren)
+
+            case REACT_PROVIDER_TYPE: {
+              const context: Context<any> = (type as any)._context
+              const { value } = props
+              this.pushProvider(context, value)
+              this.stacks.push({node: newNode, return: '', index: 0, children: toArray(props.children)})
+              return null
+            }
+
+            case REACT_CONTEXT_TYPE: {
+              const value = this._readContext((type as any)._context as Context<any>)
+              if (typeof props.children !== 'function') {
+                console.warn('Context children only be function')
+                return null
+              }
+
+              const newChildren = toArray(props.children(value))
+
+              this.stacks.push({
+                node,
+                return: '',
+                index: 0,
+                children: newChildren
+              })
+              return null
+            }
+
+            default:
+              console.warn(`Cannot support ${String($$typeof)} as jsx element`)
+              return null
           }
-          default:
-            console.warn(`Cannot support ${String($$typeof)} as jsx element`)
-            return yield ''
-        }
       }
-    } else if (node instanceof String) {
-      // raw string
-      return yield node.toString()
-    } else if (typeof node === 'object') {
-      throw new Error(
-        'Objects are not valid as a React child. If you meant to render a collection of children, use an array instead.',
-      )
     }
   }
+
+  private getNextString(): string {
+    let i = 0
+    let frame: Frame
+    while (true) {
+      frame = this.stacks[this.stacks.length - 1]
+      if (!frame || i++ > 1000) {
+        // TODO: 用更好的方式检测死循环
+        this.finished = true
+        this.hook('end')
+        return ''
+      }
+      const { node } = frame
+      if (frame.index >= frame.children.length) {
+        this.stacks.pop()
+        if (frame.return) {
+          return frame.return
+        }
+
+        if (node === null) {
+          this.finished = true
+          return ''
+        }
+
+        // 只有可能是 ReactElement
+        const { type } = node as ReactElement
+
+        if ((type as any).$$typeof === REACT_PROVIDER_TYPE) {
+          this.popProvider((type as any)._context)
+        }
+
+        continue
+      }
+
+      const child = frame.children[frame.index++]
+
+      const text = this.render(child)
+
+      if (text) {
+        return text
+      }
+
+      // if (frame.index > 0) {
+      //   // return
+      //   // node must be a ReactElement
+      //   const { type } = node as ReactElement
+      //   if (Array.isArray(node)) {
+      //     if (frame.index < node.length) {
+      //       this.push(node[frame.index++])
+      //       continue
+      //     }
+      //   } if (frame.index < frame.children.length) {
+      //     this.push(frame.children[frame.index++])
+      //     continue
+      //   } else if (type && (type as any).$$typeof === REACT_PROVIDER_TYPE) {
+      //     this.pop()
+      //     this.popProvider((type as any)._context)
+      //   } else if (frame.return) {
+      //     this.pop()
+      //     return frame.return
+      //   }
+      //   this.pop()
+      //   continue
+      // }
+
+    //   if (typeof node === 'undefined' || node === null || typeof node === 'boolean') {
+    //   } else if (typeof node === 'string' || typeof node === 'number') {
+    //     this.pop()
+    //     return escapeTextForBrowser('' + node)
+    //   } else if (typeof node === 'function') {
+    //     // 会保证不会传入函数
+    //   } else if (Array.isArray(node)) {
+    //     this.push(node[frame.index++])
+    //     continue
+    //   } else if (isValidElement(node)) {
+    //     const newNode = this.hook('visit', node)
+    //     if (newNode === null) {
+    //       this.pop()
+    //       continue
+    //     }
+    //     const {
+    //       type,
+    //       props,
+    //     } = newNode
+    //     if (typeof type === 'string') {
+    //       // host component
+    //       // TODO: 针对不同的标签对 props 进行处理，但是由于邮件模板不会用到这些特殊标签，所以暂时不处理
+    //       const tag = type.toLowerCase()
+    //       let html = `<${tag}`
+    //       const dangerHtml = props.dangerouslySetInnerHTML
+    //       const propsString = stringifyProps(
+    //         this.hook('stringifyProps', normalizeProps(this.hook('normalizeProps', props, node)), node),
+    //       )
+    //       if (propsString) {
+    //         html += ' ' + propsString
+    //       }
+
+    //       if (isSelfCloseTag(tag)) {
+    //         this.pop()
+    //         return html + ' />'
+    //       }
+
+    //       html += '>'
+    //       if (dangerHtml && dangerHtml.__html) {
+    //         this.pop()
+    //         return `${html}${dangerHtml.__html}</${tag}>`
+    //       } else if(frame.children.length) {
+    //         frame.return = `</${tag}>`
+    //         this.push(frame.children[frame.index++])
+    //         return html
+    //       } else {
+    //         this.pop()
+    //         return `${html}</${tag}>`
+    //       }
+    //     } else if (typeof type === 'function') {
+    //       // class 组件或者是函数式组件
+    //       if (isClassComponent(type)) {
+    //         const instance = new type(props)
+    //         const returnChildren = instance.render()
+    //         reuseFrame(frame, returnChildren)
+    //         continue
+    //       } else if (!isFunctionComponent(type)) {
+    //         console.warn(`${(type as any).displayName || type.name} component it not support yet`)
+    //         this.pop()
+    //         continue
+    //       }
+
+    //       const prevDispatcher = ReactCurrentDispatcher.current
+    //       ReactCurrentDispatcher.current = this.dispatcher
+
+    //       const returnChildren = type(props)
+
+    //       ReactCurrentDispatcher.current = prevDispatcher
+
+    //       reuseFrame(frame, returnChildren)
+    //       continue
+    //     } else {
+    //       // 内置类型
+    //       // 以下通过 $$typeof 确定类型
+    //       // Context Context.Provider Context.Consumer
+    //       // 以下本身就是 Symbol
+    //       // Fragment
+    //       const $$typeof = typeof type === 'symbol' ? type : ((type as any)['$$typeof'] as symbol)
+    //       switch ($$typeof) {
+    //         // 下面这些组件本身不会修改组件树，所以可以直接当做 Fragment
+    //         case REACT_ASYNC_MODE_TYPE:
+    //         case REACT_CONCURRENT_MODE_TYPE:
+    //         case REACT_PROFILER_TYPE:
+    //         case REACT_STRICT_MODE_TYPE:
+    //         case REACT_FRAGMENT_TYPE: {
+    //           if (frame.children.length) {
+    //             this.push(frame.children[frame.index++])
+    //           } else {
+    //             this.pop()
+    //           }
+    //           continue
+    //         }
+
+    //         case REACT_PROVIDER_TYPE: {
+    //           const context: Context<any> = (type as any)._context
+    //           if (frame.children.length) {
+    //             const { value } = props
+    //             this.pushProvider(context, value)
+    //             this.push(frame.children[frame.index++])
+    //           } else {
+    //             this.pop()
+    //           }
+    //           continue
+    //         }
+
+    //         case REACT_CONTEXT_TYPE: {
+    //           const value = this._readContext((type as any)._context as Context<any>)
+    //           if (typeof props.children !== 'function') {
+    //             console.warn('Context children only be function')
+    //             this.pop()
+    //             continue
+    //           }
+
+    //           const newChildren = props.children(value)
+
+    //           reuseFrame(frame, newChildren)
+    //           continue
+    //         }
+
+    //         // 这些组件是会对渲染树产生影响的，所以给予警告提示
+    //         case REACT_PORTAL_TYPE:
+    //         case REACT_FORWARD_REF_TYPE:
+    //         case REACT_MEMO_TYPE:
+    //         case REACT_LAZY_TYPE:
+    //         case REACT_FUNDAMENTAL_TYPE:
+    //         case REACT_RESPONDER_TYPE:
+    //         case REACT_SCOPE_TYPE:
+    //         case REACT_SUSPENSE_TYPE:
+    //         case REACT_SUSPENSE_LIST_TYPE: {
+    //           console.warn(`${Symbol.keyFor($$typeof)} is not support, fallback to Fragment`)
+    //           if (frame.children.length) {
+    //             this.push(frame.children[frame.index++])
+    //           } else {
+    //             this.pop()
+    //           }
+    //           continue
+    //         }
+
+    //         default:
+    //           console.warn(`Cannot support ${String($$typeof)} as jsx element`)
+    //           this.pop()
+    //           continue
+    //       }
+    //     }
+    //   } else if (node instanceof String) {
+    //     // raw string
+    //     this.pop()
+    //     return node.toString()
+    //   } else if (typeof node === 'object') {
+    //     this.pop()
+    //     throw new Error(
+    //       'Objects are not valid as a React child. If you meant to render a collection of children, use an array instead.',
+    //     )
+    //   }
+
+    //   this.pop()
+    }
+  }
+
+  // private *generateNextNode(node: ReactNode): Generator<string, void, void> {
+  //   if (typeof node === 'undefined' || node === null || typeof node === 'boolean') {
+  //     yield ''
+  //   } else if (typeof node === 'string' || typeof node === 'number') {
+  //     yield escapeTextForBrowser('' + node)
+  //   } else if (typeof node === 'function') {
+  //     // 会保证不会传入函数
+  //     yield ''
+  //   } else if (Array.isArray(node)) {
+  //     for (const element of node) {
+  //       yield* this.generateNextNode(element)
+  //     }
+  //     yield ''
+  //   } else if (isValidElement(node)) {
+  //     const newNode = this.hook('visit', node)
+  //     if (newNode === null) {
+  //       return yield ''
+  //     }
+  //     const {
+  //       type,
+  //       props: { children, ...props },
+  //     } = newNode
+  //     if (typeof type === 'string') {
+  //       // host component
+  //       // TODO: 针对不同的标签对 props 进行处理，但是由于邮件模板不会用到这些特殊标签，所以暂时不处理
+  //       const tag = type.toLowerCase()
+  //       let html = `<${tag}`
+  //       const dangerHtml = props.dangerouslySetInnerHTML
+  //       const propsString = stringifyProps(
+  //         this.hook('stringifyProps', normalizeProps(this.hook('normalizeProps', props, node)), node),
+  //       )
+  //       if (propsString) {
+  //         html += ' ' + propsString
+  //       }
+
+  //       if (isSelfCloseTag(tag)) {
+  //         return yield html + ' />'
+  //       }
+
+  //       html += '>'
+  //       if (dangerHtml && dangerHtml.__html) {
+  //         yield html + dangerHtml.__html
+  //       } else {
+  //         yield html
+  //         yield* this.generateNextNode(children)
+  //       }
+  //       yield `</${tag}>`
+  //     } else if (typeof type === 'function') {
+  //       // class 组件或者是函数式组件
+  //       if (isClassComponent(type)) {
+  //         const instance = new type({ ...props, children })
+  //         const returnChildren = instance.render()
+  //         return yield* this.generateNextNode(returnChildren)
+  //       } else if (!isFunctionComponent(type)) {
+  //         console.warn(`${(type as any).displayName || type.name} component it not support yet`)
+  //         return yield ''
+  //       }
+
+  //       const prevDispatcher = ReactCurrentDispatcher.current
+  //       ReactCurrentDispatcher.current = this.dispatcher
+
+  //       const returnChildren = type({
+  //         ...props,
+  //         children,
+  //       })
+
+  //       ReactCurrentDispatcher.current = prevDispatcher
+
+  //       yield* this.generateNextNode(returnChildren)
+  //     } else {
+  //       // 内置类型
+  //       // 以下通过 $$typeof 确定类型
+  //       // Context Context.Provider Context.Consumer
+  //       // 以下本身就是 Symbol
+  //       // Fragment
+  //       const $$typeof = typeof type === 'symbol' ? type : ((type as any)['$$typeof'] as symbol)
+  //       switch ($$typeof) {
+  //         // 这些组件是会对渲染树产生影响的，所以给予警告提示
+  //         case REACT_PORTAL_TYPE:
+  //         case REACT_FORWARD_REF_TYPE:
+  //         case REACT_MEMO_TYPE:
+  //         case REACT_LAZY_TYPE:
+  //         case REACT_FUNDAMENTAL_TYPE:
+  //         case REACT_RESPONDER_TYPE:
+  //         case REACT_SCOPE_TYPE:
+  //         case REACT_SUSPENSE_TYPE:
+  //         case REACT_SUSPENSE_LIST_TYPE: {
+  //           console.warn(`${Symbol.keyFor($$typeof)} is not support, fallback to Fragment`)
+  //           return yield* this.generateNextNode(children)
+  //         }
+
+  //         // 下面这些组件本身不会修改组件树，所以可以直接当做 Fragment
+  //         case REACT_ASYNC_MODE_TYPE:
+  //         case REACT_CONCURRENT_MODE_TYPE:
+  //         case REACT_PROFILER_TYPE:
+  //         case REACT_STRICT_MODE_TYPE:
+  //         case REACT_FRAGMENT_TYPE: {
+  //           return yield* this.generateNextNode(children)
+  //         }
+
+  //         case REACT_PROVIDER_TYPE: {
+  //           const context: Context<any> = type as any
+  //           const { value } = props
+  //           this.pushProvider(context, value)
+  //           yield* this.generateNextNode(children)
+  //           this.popProvider(context)
+  //           return
+  //         }
+
+  //         case REACT_CONTEXT_TYPE: {
+  //           const value = this._readContext((type as any)._context as Context<any>)
+  //           if (typeof children !== 'function') {
+  //             console.warn('Context children only be function')
+  //             return yield ''
+  //           }
+
+  //           const newChildren = children(value)
+  //           return yield* this.generateNextNode(newChildren)
+  //         }
+  //         default:
+  //           console.warn(`Cannot support ${String($$typeof)} as jsx element`)
+  //           return yield ''
+  //       }
+  //     }
+  //   } else if (node instanceof String) {
+  //     // raw string
+  //     return yield node.toString()
+  //   } else if (typeof node === 'object') {
+  //     throw new Error(
+  //       'Objects are not valid as a React child. If you meant to render a collection of children, use an array instead.',
+  //     )
+  //   }
+  // }
 }

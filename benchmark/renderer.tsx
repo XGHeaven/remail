@@ -1,7 +1,7 @@
 import React, { Fragment, createContext, useContext, useState } from 'react'
 import { Suite } from 'benchmark'
 
-import { renderToString as server } from 'react-dom/server'
+import { renderToStaticMarkup as server } from 'react-dom/server'
 import { renderToString as remail } from '../packages/renderer'
 
 const suite = new Suite()
@@ -13,7 +13,13 @@ const hostDOM = (
   </div>
 )
 
-const hostText = <Fragment>here is a text</Fragment>
+const hugeDOM = (
+  <div>
+    {new Array(100).fill(0).map((_, i) => (
+      <span>row-{i}</span>
+    ))}
+  </div>
+)
 
 function TodoList(props: any) {
   const { todos } = useContext(TodoContext)
@@ -56,18 +62,29 @@ const todoList = (
   </div>
 )
 
+const hugeComponet = (
+  <div>
+    {new Array(100).fill(0).map((_, i) => (
+      todoList
+    ))}
+  </div>
+)
+
 suite
-  .add('ReactDOM/host-dom', () => {
+  .add('baseline(1e7-loop)', () => {
+    for (let i = 0; i < 1e7; i++) {}
+  })
+  .add('ReactDOM/simple-dom', () => {
     server(hostDOM)
   })
-  .add('RemailRenderer/host-dom', () => {
+  .add('RemailRenderer/simple-dom', () => {
     remail(hostDOM)
   })
-  .add('ReactDOM/host-text', () => {
-    server(hostText)
+  .add('ReactDOM/huge-dom', () => {
+    server(hugeDOM)
   })
-  .add('RemailRenderer/host-text', () => {
-    remail(hostText)
+  .add('RemailRenderer/huge-dom', () => {
+    remail(hugeDOM)
   })
   .add('ReactDOM/todo-list', () => {
     server(todoList)
@@ -75,10 +92,13 @@ suite
   .add('RemailRenderer/todo-list', () => {
     remail(todoList)
   })
+  .add('ReactDOM/huge-component', () => {
+    server(hugeComponet)
+  })
+  .add('RemailRenderer/huge-component', () => {
+    remail(hugeComponet)
+  })
   .on('cycle', function(event: any) {
     console.log(String(event.target));
-  })
-  .on('complete', function(this: any) {
-    console.log('Fastest is ' + this.filter('fastest').map('name'));
   })
   .run()

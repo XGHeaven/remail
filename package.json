@@ -6,7 +6,8 @@
   "scripts": {
     "test": "jest",
     "build": "lerna run build",
-    "format": "prettier --write \"./packages/**/src/**/*.{ts,tsx}\""
+    "format": "prettier --write \"./packages/**/src/**/*.{ts,tsx}\"",
+    "bench": "NODE_ENV=production ts-node -T benchmark/renderer.tsx"
   },
   "keywords": [
     "react",
